@@ -336,7 +336,7 @@ def main():
 
             else:  # Domain NOT EXIST.
                 # Can't work the configuration of non-existent domain
-                module.fail_json(msg=(IDG_API.ERROR_REACH_STATE + ' Domain not exist!').format(state, domain_name))
+                module.fail_json(msg=(IDG_API.ERROR_REACH_STATE + " " + IDG_API.ERROR_NOT_DOMAIN).format(state, domain_name))
 
         else:  # Can't read domain's lists
             module.fail_json(msg=IDG_API.ERROR_GET_DOMAIN_LIST)

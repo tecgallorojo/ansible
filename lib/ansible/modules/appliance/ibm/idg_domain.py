@@ -417,7 +417,7 @@ def main():
                             module.fail_json(msg=IDG_API.ERROR_REACH_STATE.format(state, domain_name))
 
                     elif state in ('restarted', 'quiesced', 'unquiesced'):  # Can't do this actions
-                        module.fail_json(msg=(IDG_API.ERROR_REACH_STATE + " Domain not exist!").format(state, domain_name))
+                        module.fail_json(msg=(IDG_API.ERROR_REACH_STATE + " " + IDG_API.ERROR_NOT_DOMAIN).format(state, domain_name))
 
                 else:  # Domain EXIST
                     # Update, save or restart

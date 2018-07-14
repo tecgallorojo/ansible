@@ -13,6 +13,7 @@ import json
 
 # Seed the result
 result = dict(
+    failed=False,
     changed=False,
     name='default',
     msg='the best is coming'
@@ -37,6 +38,7 @@ class IDG_Utils(object):
     #############################
 
     IMMUTABLE_MESSAGE = 'The current state is consistent with the desired configuration'
+    COMPLETED_MESSAGE = 'Completed'
     CHECK_MODE_MESSAGE = 'Change was only simulated, due to enabling verification mode'
     UNCONTROLLED_EXCEPTION = 'Unknown exception'
 
@@ -75,3 +77,8 @@ class IDG_Utils(object):
     def on_off(arg):
         # Translate boolean to: on, off
         return "on" if arg else "off"
+
+    @staticmethod
+    def from_on_off(arg):
+        # Translate "on", "off" to boolean
+        return True if arg == "on" else False

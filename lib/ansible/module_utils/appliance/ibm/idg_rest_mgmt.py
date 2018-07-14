@@ -43,6 +43,7 @@ class IDG_API(object):
     ERROR_RETRIEVING_RESULT = 'Retrieving the result of "{0}" over domain "{1}".'
     ERROR_ACCEPTING_ACTION = 'Accepting "{0}" over domain "{1}".'
     ERROR_REACH_STATE = 'Unable to reach state "{0}" in domain {1}.'
+    ERROR_NOT_DOMAIN = 'Domain not exist!.'
 
     def __init__(self, **kwargs):
         # Initialize the common variables to all calls
