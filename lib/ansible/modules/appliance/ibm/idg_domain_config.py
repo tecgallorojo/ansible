@@ -245,9 +245,9 @@ def main():
         export_action_msg = {"Export": {
             "Format": "ZIP",
             "UserComment": module.params['user_summary'],
-            "AllFiles": IDG_Utils.on_off(module.params['all_files']),
-            "Persisted": IDG_Utils.on_off(module.params['persisted']),
-            "IncludeInternalFiles": IDG_Utils.on_off(module.params['internal_files'])
+            "AllFiles": IDG_Utils.str_on_off(module.params['all_files']),
+            "Persisted": IDG_Utils.str_on_off(module.params['persisted']),
+            "IncludeInternalFiles": IDG_Utils.str_on_off(module.params['internal_files'])
             # TODO
             # "DeploymentPolicy":""
         }}
@@ -255,10 +255,10 @@ def main():
         import_action_msg = {"Import": {
             "Format": "ZIP",
             "InputFile": module.params['input_file'],
-            "OverwriteFiles": IDG_Utils.on_off(module.params['overwrite_files']),
-            "OverwriteObjects": IDG_Utils.on_off(module.params['overwrite_objects']),
-            "DryRun": IDG_Utils.on_off(module.params['dry_run']),
-            "RewriteLocalIP": IDG_Utils.on_off(module.params['rewrite_local_ip'])
+            "OverwriteFiles": IDG_Utils.str_on_off(module.params['overwrite_files']),
+            "OverwriteObjects": IDG_Utils.str_on_off(module.params['overwrite_objects']),
+            "DryRun": IDG_Utils.str_on_off(module.params['dry_run']),
+            "RewriteLocalIP": IDG_Utils.str_on_off(module.params['rewrite_local_ip'])
             # TODO
             # "DeploymentPolicy": "name",
             # "DeploymentPolicyParams": "name",

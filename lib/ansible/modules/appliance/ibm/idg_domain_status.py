@@ -146,18 +146,23 @@ def main():
 
             # List of existing domains
             if isinstance(dstatus_data['DomainStatus'], dict):  # if has only default domain
-                configured_domains = [dstatus_data['DomainStatus']]
+                configured_domains = [dstatus_data['DomainStatus'] if (domain_filter is None) or
+                                                                      (re.match(domain_filter, dstatus_data['DomainStatus']['Domain'], filter_flags))
+                                                                   else None]
             else:
                 if domain_filter is not None:
                     configured_domains = [d for d in dstatus_data['DomainStatus'] if re.match(domain_filter, d['Domain'], filter_flags)]
                 else:
                     configured_domains = dstatus_data['DomainStatus']
 
-            if configured_domains != []:
+            if configured_domains != [] and configured_domains != [None]:
                 for d in configured_domains:
 
+                    if d is None:  # don't process it
+                        continue
+
                     for field in ["DebugEnabled", "DiagEnabled", "ProbeEnabled", "SaveNeeded", "TraceEnabled"]:
-                        d.update({field: IDG_Utils.from_on_off(d[field])})
+                        d.update({field: IDG_Utils.bool_on_off(d[field])})
 
                     # Get domain configuration
                     dconf_code, dconf_msg, dconf_data = idg_mgmt.api_call(IDG_API.URI_DOMAIN_CONFIG.format(d['Domain']), method='GET')

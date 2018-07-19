@@ -346,19 +346,19 @@ def main():
             "ConfigMode": module.params['config_mode'],
             "ConfigPermissionsMode": module.params['config_permissions_mode'],
             "ImportFormat": module.params['import_format'],
-            "LocalIPRewrite": IDG_Utils.on_off(module.params['local_ip_rewrite']),
+            "LocalIPRewrite": IDG_Utils.str_on_off(module.params['local_ip_rewrite']),
             "MaxChkpoints": module.params['max_chkpoints'],
             "FileMap": {
-                "Display": IDG_Utils.on_off(filemap_data_spec['display']),
-                "Exec": IDG_Utils.on_off(filemap_data_spec['exec']),
-                "CopyFrom": IDG_Utils.on_off(filemap_data_spec['copyfrom']),
-                "CopyTo": IDG_Utils.on_off(filemap_data_spec['copyto']),
-                "Delete": IDG_Utils.on_off(filemap_data_spec['delete']),
-                "Subdir": IDG_Utils.on_off(filemap_data_spec['subdir'])
+                "Display": IDG_Utils.str_on_off(filemap_data_spec['display']),
+                "Exec": IDG_Utils.str_on_off(filemap_data_spec['exec']),
+                "CopyFrom": IDG_Utils.str_on_off(filemap_data_spec['copyfrom']),
+                "CopyTo": IDG_Utils.str_on_off(filemap_data_spec['copyto']),
+                "Delete": IDG_Utils.str_on_off(filemap_data_spec['delete']),
+                "Subdir": IDG_Utils.str_on_off(filemap_data_spec['subdir'])
             },
             "MonitoringMap": {
-                "Audit": IDG_Utils.on_off(monitoringmap_data_spec['audit']),
-                "Log": IDG_Utils.on_off(monitoringmap_data_spec['log'])
+                "Audit": IDG_Utils.str_on_off(monitoringmap_data_spec['audit']),
+                "Log": IDG_Utils.str_on_off(monitoringmap_data_spec['log'])
             }
         }}
 

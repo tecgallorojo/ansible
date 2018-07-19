@@ -7,6 +7,7 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 from ansible.module_utils.urls import url_argument_spec
+from ansible.module_utils._text import to_native
 
 import json
 # import pdb
@@ -68,17 +69,17 @@ class IDG_Utils(object):
                 return dict(item.split(':', 1) for item in data.split(','))
             except Exception:
                 # Can't parse
-                module.fail_json(msg='The string representation for the `{0}` requires a key:value,key:value,... syntax to be properly parsed.'.format(desc))
+                module.fail_json(msg=to_native('The string representation for the `{0}` requires a key:value,key:value,... syntax to be properly parsed.'.format(desc)))
         else:
             # data is empty
             return None
 
     @staticmethod
-    def on_off(arg):
-        # Translate boolean to: on, off
+    def str_on_off(arg):
+        # Translate boolean to: "on", "off"
         return "on" if arg else "off"
 
     @staticmethod
-    def from_on_off(arg):
+    def bool_on_off(arg):
         # Translate "on", "off" to boolean
-        return True if arg == "on" else False
+        return True if arg.lower() == "on" else False
