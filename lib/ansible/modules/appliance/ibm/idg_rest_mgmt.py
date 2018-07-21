@@ -115,7 +115,7 @@ payload:
 '''
 
 import json
-import pdb
+# import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -175,7 +175,7 @@ def main():
         # Here the action begins
         #
 
-        pdb.set_trace()
+        # pdb.set_trace()
 
         # Do request
         result['http_code'], result['http_phrase'], result['payload'] = idg_mgmt.api_call(module.params['uri'], method=module.params['method'],

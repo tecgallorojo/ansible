@@ -163,6 +163,36 @@ msg:
   sample:
     - Configuration was created.
     - Unknown error for (https://idg-host1:5554/mgmt/domains/config/). <open_url error timed out>
+results:
+  description:
+    - Import result detail
+  returned: when successfull imported
+  type: complex
+  contains:
+      exec-script-results:
+          description: Result of the execution of the import scripts
+          returned: success
+          type: complex
+      export-details:
+          description: Export details
+          returned: success
+          type: complex
+      file-copy-log:
+          description: Record of the copying files process
+          returned: success
+          type: complex
+      imported-debug: Detail when importing debugging configurations
+          description:
+          returned: success
+          type: complex
+      imported-files: Detail when importing files
+          description:
+          returned: success
+          type: complex
+      imported-objects: Imported objects
+          description:
+          returned: success
+          type: complex
 '''
 
 import json
@@ -178,6 +208,16 @@ try:
     HAS_IDG_DEPS = True
 except ImportError:
     HAS_IDG_DEPS = False
+
+# Return dictionary with the inventory of states
+def get_status_summary(list_dict):
+    s={}
+    for i in list_dict:
+        if i['status'] not in s.keys():
+            s.update({i['status']: 1})
+        else:
+            s[i['status']] += 1
+    return s
 
 
 def main():
@@ -313,7 +353,7 @@ def main():
                             result['changed'] = True
                         else:
                             # Can't retrieve the export
-                            module.fail_json(msg=to_native(IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
+                            module.fail_json(msg=IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                     elif exp_code == 200 and exp_msg == 'OK':
                         # Successfully processed synchronized action
@@ -322,7 +362,7 @@ def main():
 
                     else:
                         # Export not accepted
-                        module.fail_json(msg=to_native(IDG_API.ERROR_ACCEPTING_ACTION.format(state, domain_name)))
+                        module.fail_json(msg=IDG_API.ERROR_ACCEPTING_ACTION.format(state, domain_name))
 
                 elif state == 'reseted':
 
@@ -348,7 +388,7 @@ def main():
                             result['changed'] = True
                         else:
                             # Can't retrieve the reset result
-                            module.fail_json(msg=to_native(IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
+                            module.fail_json(msg=IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                     elif reset_code == 200 and reset_msg == 'OK':
                         # Successfully processed synchronized action
@@ -357,7 +397,7 @@ def main():
 
                     else:
                         # Reseted not accepted
-                        module.fail_json(msg=to_native(IDG_API.ERROR_ACCEPTING_ACTION.format(state, domain_name)))
+                        module.fail_json(msg=IDG_API.ERROR_ACCEPTING_ACTION.format(state, domain_name))
 
                 elif state == 'saved':
 
@@ -395,7 +435,7 @@ def main():
                                     result['changed'] = True
                                 else:
                                     # Can't retrieve the save result
-                                    module.fail_json(msg=to_native(IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
+                                    module.fail_json(msg=IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                             elif save_code == 200 and save_msg == 'OK':
                                 # Successfully processed synchronized action save
@@ -403,7 +443,7 @@ def main():
                                 result['changed'] = True
                             else:
                                 # Can't saved
-                                module.fail_json(msg=to_native(IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
+                                module.fail_json(msg=IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name))
                         else:
                             # Domain is save
                             result['msg'] = IDG_Utils.IMMUTABLE_MESSAGE
@@ -418,7 +458,6 @@ def main():
                     imp_code, imp_msg, imp_data = idg_mgmt.api_call(IDG_API.URI_ACTION.format(domain_name), method='POST',
                                                                     data=json.dumps(import_action_msg))
 
-                    # pdb.set_trace()
                     if imp_code == 202 and imp_msg == 'Accepted':
                         # Asynchronous actions import accepted. Wait for complete
                         action_result = idg_mgmt.wait_for_action_end(IDG_API.URI_ACTION.format(domain_name), href=imp_data['_links']['location']['href'],
@@ -429,17 +468,87 @@ def main():
 
                         if doim_code == 200 and doim_msg == 'OK':
                             # Export completed
-                            if doim_data['result']['Import']['import-results']['detected-errors'] == 'true':
+                            if doim_data['result']['Import']['import-results']['detected-errors'] != 'false':
+                                # Import failed
                                 # pdb.set_trace()
-                                result['msg'] = 'Error code:' + doim_data['result']['Import']['import-results']['detected-errors']['error']
+                                result['msg'] = 'Import failed with error code: "' + doim_data['result']['Import']['import-results']['detected-errors']['error'] + '"'
                                 result['changed'] = False
                                 result['failed'] = True
                             else:
+                                # Import success
+                                result.update({"results": []})  # Update to result
+
+                                result['results'].append({"export-details": doim_data['result']['Import']['import-results']['export-details']})
+
+                                # EXEC-SCRIPT-RESULTS
+                                try:
+                                    exec_script_results=doim_data['result']['Import']['import-results']['exec-script-results']
+                                    try:
+                                        if isinstance(exec_script_results['cfg-result'], list):
+
+                                            result['results'].append({"exec-script-results": {"summary": {"total": len(exec_script_results['cfg-result']),
+                                                                                                          "status": get_status_summary(exec_script_results['cfg-result'])},
+                                                                                              "detail": exec_script_results['cfg-result']}})
+                                        else:
+                                            result['results'].append({"exec-script-results": exec_script_results['cfg-result']})
+
+                                    except Exception as e:
+                                        result['results'].append({"exec-script-results": exec_script_results})
+
+                                except Exception as e:
+                                    pass
+
+                                try:
+                                    result['results'].append({"file-copy-log": doim_data['result']['Import']['import-results']['file-copy-log']['file-result']})
+                                except Exception as e:
+                                    pass
+
+                                try:
+                                    result['results'].append({"imported-debug": doim_data['result']['Import']['import-results']['imported-debug']})
+                                except Exception as e:
+                                    pass
+
+                                # IMPORTED-FILES
+                                try:
+                                    imported_files=doim_data['result']['Import']['import-results']['imported-files']
+                                    try:
+                                        if isinstance(imported_files['file'], list):
+
+                                            result['results'].append({"imported-files": {"summary": {"total": len(imported_files['file']),
+                                                                                                     "status": get_status_summary(imported_files['file'])},
+                                                                                         "detail": imported_files['file']}})
+                                        else:
+                                            result['results'].append({"imported-files": imported_files['file']})
+
+                                    except Exception as e:
+                                        result['results'].append({"imported-files": imported_files})
+
+                                except Exception as e:
+                                    pass
+
+                                # IMPORTED-OBJECTS
+                                try:
+                                    imported_objects=doim_data['result']['Import']['import-results']['imported-objects']
+                                    try:
+                                        if isinstance(imported_objects['object'], list):
+
+                                            result['results'].append({"imported-objects": {"summary": {"total": len(imported_objects['object']),
+                                                                                                       "status": get_status_summary(imported_objects['object'])},
+                                                                                           "detail": imported_objects['object']}})
+                                        else:
+                                            result['results'].append({"imported-objects": imported_objects['object']})
+
+                                    except Exception as e:
+                                        result['results'].append({"imported-objects": imported_objects})
+
+                                except Exception as e:
+                                    pass
+
                                 result['msg'] = doim_data['status'].capitalize()
                                 result['changed'] = True
                         else:
                             # Can't retrieve the import result
-                            module.fail_json(msg=to_native(IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
+                            module.fail_json(msg=IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                     elif imp_code == 200 and imp_msg == 'OK':
                         # Successfully processed synchronized action
@@ -448,7 +557,7 @@ def main():
 
                     else:
                         # Imported not accepted
-                        module.fail_json(msg=to_native(IDG_API.ERROR_ACCEPTING_ACTION.format(state, domain_name)))
+                        module.fail_json(msg=IDG_API.ERROR_ACCEPTING_ACTION.format(state, domain_name))
 
             else:  # Domain NOT EXIST.
                 # pdb.set_trace()

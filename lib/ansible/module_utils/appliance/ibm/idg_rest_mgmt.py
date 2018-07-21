@@ -128,6 +128,7 @@ class IDG_API(object):
         max_steps = 30
         count = 0
         action_result = ''
+        resource = uri.rsplit('/', 1)[-1]
         # pdb.set_trace()
 
         while (action_result.lower() not in str_results) and (count < max_steps):
@@ -140,9 +141,9 @@ class IDG_API(object):
                     sleep(self.SHORT_DELAY)
             else:
                 # Opps can't get status
-                self.ansible_module.fail_json(msg=to_native(self.ERROR_RETRIEVING_STATUS.format(kwargs['state'], uri.rsplit('/', 1)[-1])))
+                self.ansible_module.fail_json(msg=to_native(self.ERROR_RETRIEVING_STATUS.format(kwargs['state'], resource)))
 
         if count == max_steps:
-            self.ansible_module.fail_json(msg=to_native((self.ERROR_RETRIEVING_STATUS + 'Reached the maximum level of interactions').format(kwargs['state'], uri.rsplit('/', 1)[-1])))
+            self.ansible_module.fail_json(msg=to_native((self.ERROR_RETRIEVING_STATUS + 'Reached the maximum level of interactions').format(kwargs['state'], resource)))
         else:
             return action_result.capitalize()

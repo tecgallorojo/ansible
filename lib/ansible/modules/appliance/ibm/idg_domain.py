@@ -478,7 +478,7 @@ def main():
                                     result['changed'] = True
                                 else:
                                     # Can't retrieve the restart result
-                                    module.fail_json(msg=to_native(IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
+                                    module.fail_json(msg=IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                             elif restart_code == 200 and restart_msg == 'OK':
                                 # Successfully processed synchronized action
@@ -487,7 +487,7 @@ def main():
 
                             else:
                                 # Can't restarted
-                                module.fail_json(msg=to_native(IDG_API.ERROR_ACCEPTING_ACTION.format(state, domain_name)))
+                                module.fail_json(msg=IDG_API.ERROR_ACCEPTING_ACTION.format(state, domain_name))
 
                         elif state in ('quiesced', 'unquiesced'):
 
@@ -526,7 +526,7 @@ def main():
                                                 result['changed'] = True
                                             else:
                                                 # Can't get the quiesced action result
-                                                module.fail_json(msg=to_native(IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
+                                                module.fail_json(msg=IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                                         elif qd_code == 200 and qd_msg == 'OK':
                                             # Successfully processed synchronized action
@@ -535,7 +535,7 @@ def main():
 
                                         else:
                                             # Can't quiesced
-                                            module.fail_json(msg=to_native(IDG_API.ERROR_ACCEPTING_ACTION.format(state, domain_name)))
+                                            module.fail_json(msg=IDG_API.ERROR_ACCEPTING_ACTION.format(state, domain_name))
                                     else:
                                         # Domain is quiesced
                                         result['msg'] = IDG_Utils.IMMUTABLE_MESSAGE
@@ -565,7 +565,7 @@ def main():
                                                 result['changed'] = True
                                             else:
                                                 # Can't get unquiesce final result
-                                                module.fail_json(msg=to_native(IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
+                                                module.fail_json(msg=IDG_API.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                                         elif uqd_code == 200 and uqd_msg == 'OK':
                                             # Successfully processed synchronized action
@@ -574,7 +574,7 @@ def main():
 
                                         else:
                                             # Can't accept unquiesce
-                                            module.fail_json(msg=to_native(IDG_API.ERROR_ACCEPTING_ACTION.format(state, domain_name)))
+                                            module.fail_json(msg=IDG_API.ERROR_ACCEPTING_ACTION.format(state, domain_name))
 
                                     else:
                                         # Domain is unquiesced
