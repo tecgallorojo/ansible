@@ -148,7 +148,7 @@ def main():
             if isinstance(dstatus_data['DomainStatus'], dict):  # if has only default domain
                 configured_domains = [dstatus_data['DomainStatus'] if (domain_filter is None) or
                                                                       (re.match(domain_filter, dstatus_data['DomainStatus']['Domain'], filter_flags))
-                                                                   else None]
+                                      else None]
             else:
                 if domain_filter is not None:
                     configured_domains = [d for d in dstatus_data['DomainStatus'] if re.match(domain_filter, d['Domain'], filter_flags)]
@@ -167,7 +167,7 @@ def main():
                     # Get domain configuration
                     dconf_code, dconf_msg, dconf_data = idg_mgmt.api_call(IDG_API.URI_DOMAIN_CONFIG.format(d['Domain']), method='GET')
 
-                    ds={}  # State of each domain
+                    ds = {}  # State of each domain
                     if dconf_code == 200 and dconf_msg == 'OK':
                         ds.update(d)  # Add status data
 

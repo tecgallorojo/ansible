@@ -74,7 +74,7 @@ http_code:
   description:
     - HTTP response status code.
   returned: always
-  type: integer
+  type: int
   sample:
     - 100
     - 200

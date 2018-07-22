@@ -181,16 +181,16 @@ results:
           description: Record of the copying files process
           returned: success
           type: complex
-      imported-debug: Detail when importing debugging configurations
-          description:
+      imported-debug:
+          description: Detail when importing debugging configurations
           returned: success
           type: complex
-      imported-files: Detail when importing files
-          description:
+      imported-files:
+          description: Detail when importing files
           returned: success
           type: complex
-      imported-objects: Imported objects
-          description:
+      imported-objects:
+          description: Imported objects
           returned: success
           type: complex
 '''
@@ -209,9 +209,10 @@ try:
 except ImportError:
     HAS_IDG_DEPS = False
 
+
 # Return dictionary with the inventory of states
 def get_status_summary(list_dict):
-    s={}
+    s = {}
     for i in list_dict:
         if i['status'] not in s.keys():
             s.update({i['status']: 1})
@@ -468,27 +469,29 @@ def main():
 
                         if doim_code == 200 and doim_msg == 'OK':
                             # Export completed
-                            if doim_data['result']['Import']['import-results']['detected-errors'] != 'false':
+                            import_results = doim_data['result']['Import']['import-results']
+                            if import_results['detected-errors'] != 'false':
                                 # Import failed
                                 # pdb.set_trace()
-                                result['msg'] = 'Import failed with error code: "' + doim_data['result']['Import']['import-results']['detected-errors']['error'] + '"'
+                                result['msg'] = 'Import failed with error code: "' + import_results['detected-errors']['error'] + '"'
                                 result['changed'] = False
                                 result['failed'] = True
                             else:
                                 # Import success
                                 result.update({"results": []})  # Update to result
 
-                                result['results'].append({"export-details": doim_data['result']['Import']['import-results']['export-details']})
+                                result['results'].append({"export-details": import_results['export-details']})
 
                                 # EXEC-SCRIPT-RESULTS
                                 try:
-                                    exec_script_results=doim_data['result']['Import']['import-results']['exec-script-results']
+                                    exec_script_results = import_results['exec-script-results']
                                     try:
                                         if isinstance(exec_script_results['cfg-result'], list):
 
-                                            result['results'].append({"exec-script-results": {"summary": {"total": len(exec_script_results['cfg-result']),
-                                                                                                          "status": get_status_summary(exec_script_results['cfg-result'])},
-                                                                                              "detail": exec_script_results['cfg-result']}})
+                                            result['results'].append({"exec-script-results":
+                                                                     {"summary": {"total": len(exec_script_results['cfg-result']),
+                                                                                  "status": get_status_summary(exec_script_results['cfg-result'])},
+                                                                      "detail": exec_script_results['cfg-result']}})
                                         else:
                                             result['results'].append({"exec-script-results": exec_script_results['cfg-result']})
 
@@ -499,18 +502,18 @@ def main():
                                     pass
 
                                 try:
-                                    result['results'].append({"file-copy-log": doim_data['result']['Import']['import-results']['file-copy-log']['file-result']})
+                                    result['results'].append({"file-copy-log": import_results['file-copy-log']['file-result']})
                                 except Exception as e:
                                     pass
 
                                 try:
-                                    result['results'].append({"imported-debug": doim_data['result']['Import']['import-results']['imported-debug']})
+                                    result['results'].append({"imported-debug": import_results['imported-debug']})
                                 except Exception as e:
                                     pass
 
                                 # IMPORTED-FILES
                                 try:
-                                    imported_files=doim_data['result']['Import']['import-results']['imported-files']
+                                    imported_files = import_results['imported-files']
                                     try:
                                         if isinstance(imported_files['file'], list):
 
@@ -528,13 +531,13 @@ def main():
 
                                 # IMPORTED-OBJECTS
                                 try:
-                                    imported_objects=doim_data['result']['Import']['import-results']['imported-objects']
+                                    imported_objects = import_results['imported-objects']
                                     try:
                                         if isinstance(imported_objects['object'], list):
 
                                             result['results'].append({"imported-objects": {"summary": {"total": len(imported_objects['object']),
-                                                                                                       "status": get_status_summary(imported_objects['object'])},
-                                                                                           "detail": imported_objects['object']}})
+                                                                                           "status": get_status_summary(imported_objects['object'])},
+                                                                      "detail": imported_objects['object']}})
                                         else:
                                             result['results'].append({"imported-objects": imported_objects['object']})
 

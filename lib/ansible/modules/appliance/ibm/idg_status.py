@@ -21,30 +21,13 @@ version_added: "2.7"
 options:
 
   parameters:
-    description:
-      - Define a list of types of parameters to retrieve
-    default: All
+    description: >
+      Define a list of types of parameters to retrieve. The parameters are grouped in the following categories:
+      All, Battery, Crypto, Sensors, DateTime, Temperature, Network, Failure, Firmware, Platform, Library, License,
+      NTP, Raid, SNMP, Cloud, Balanced, Services, Standby, System
+    default:
+        - All
     required: True
-    choices:
-        - Battery
-        - Crypto
-        - Sensors
-        - DateTime
-        - Temperature
-        - Network
-        - Failure
-        - Firmware
-        - Platform
-        - Library
-        - License
-        - NTP
-        - Raid
-        - SNMP
-        - Cloud
-        - Balanced
-        - Services
-        - Standby
-        - System
 
 extends_documentation_fragment: idg
 
@@ -80,11 +63,21 @@ status:
   - Recovered states
   returned: success
   type: complex
-  sample: {
-            "status": {
-
+  sample: [
+            {
+                "DateTime": [
+                    {
+                        "DateTimeStatus": {
+                            "bootuptime2": "0 days 00:11:49",
+                            "time": "Sun Jul 22 10:03:03 2018",
+                            "timezone": "EDT",
+                            "tzspec": "EST5EDT,M3.2.0/2:00,M11.1.0/2:00",
+                            "uptime2": "0 days 00:03:52"
+                        }
+                    }
+                ]
             }
-        }
+        ]
 '''
 
 import json
@@ -152,8 +145,8 @@ def main():
                            password=idg_data_spec['password'],
                            force_basic_auth=IDG_Utils.BASIC_AUTH_SPEC)
 
-        _DOMAIN="default"
-        _STATUS_DEFAULT="/mgmt/status/" + _DOMAIN + "/"
+        _DOMAIN = "default"
+        _STATUS_DEFAULT = "/mgmt/status/" + _DOMAIN + "/"
 
         status_db = [
             {"param": "Battery", "href": _STATUS_DEFAULT + "Battery"},
@@ -210,7 +203,7 @@ def main():
         # pdb.set_trace()
 
         # Do request
-        status_results=[]
+        status_results = []
         pset = set()
 
         for s in status_db:
@@ -239,9 +232,9 @@ def main():
             if pl:
                 status_results.append({s['param']: pl})
 
-        result['msg']=IDG_Utils.COMPLETED_MESSAGE
-        result['changed']=False
-        result['status']=status_results
+        result['msg'] = IDG_Utils.COMPLETED_MESSAGE
+        result['changed'] = False
+        result['status'] = status_results
 
     except Exception as e:
         # Uncontrolled exception
