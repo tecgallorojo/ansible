@@ -58,6 +58,12 @@ options:
       - NOT YET IMPLEMENTED, its value are fixed so as not to affect the immutability
     default: ZIP
 
+  visible:
+    description: "Set which application domains have their local: directory visible to this application domain."
+    default:
+        - default
+    required: False
+
   local_ip_rewrite:
     description:
       - Whether to rewrite local IP addresses during import.
@@ -234,7 +240,7 @@ msg:
 '''
 
 import json
-# import pdb
+import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -285,6 +291,7 @@ def main():
         monitoring_map=dict(type='dict', options=monitoringmap_spec, default=dict({'audit': False,
                                                                                    'log': False})),  # Events  when work whith files
         max_chkpoints=dict(type='int', default=3),  # The maximum number of configuration checkpoints to support.
+        visible=dict(type='list', default=['default']),  # Which application domains have visible to this domain
         # TODO !!!
         # It is better to guarantee immutability while waiting.
         config_mode=dict(type='str', default='local'),
@@ -312,6 +319,13 @@ def main():
         filemap_data_spec = IDG_Utils.parse_to_dict(module, module.params['file_map'], 'FileMap', IDG_Utils.ANSIBLE_VERSION)
         monitoringmap_data_spec = IDG_Utils.parse_to_dict(module, module.params['monitoring_map'], 'MonitoringMap', IDG_Utils.ANSIBLE_VERSION)
         quiesce_conf_data_spec = IDG_Utils.parse_to_dict(module, module.params['quiesce_conf'], 'QuiesceConf', IDG_Utils.ANSIBLE_VERSION)
+
+        if len(module.params['visible']) == 1:
+            visible_domain = {"value": module.params['visible'][0]}
+        else:
+            visible_domain = []
+            for d in module.params['visible']:
+                visible_domain.append({"value": d})
 
         # Domain to work
         domain_name = module.params['name']
@@ -359,7 +373,8 @@ def main():
             "MonitoringMap": {
                 "Audit": IDG_Utils.str_on_off(monitoringmap_data_spec['audit']),
                 "Log": IDG_Utils.str_on_off(monitoringmap_data_spec['log'])
-            }
+            },
+            "NeighborDomain": visible_domain
         }}
 
         # List of properties that are managed
@@ -381,6 +396,7 @@ def main():
         #
         # Here the action begins
         #
+        pdb.set_trace()
 
         # List of configured domains
         chk_code, chk_msg, chk_data = idg_mgmt.api_call(IDG_API.URI_DOMAIN_LIST, method='GET')
@@ -434,6 +450,11 @@ def main():
                         for k, v in dc_data['Domain'].items():
                             if k not in domain_obj_items:
                                 del dc_data['Domain'][k]
+                            elif k == 'NeighborDomain':
+                                if isinstance(dc_data['Domain'][k], dict):
+                                    del dc_data['Domain'][k]['href']
+                                elif isinstance(dc_data['Domain'][k], list):
+                                    dc_data['Domain'][k] = [{'value': dv['value']} for dv in dc_data['Domain'][k]]
 
                         if state == 'present' and (domain_obj_msg['Domain'] != dc_data['Domain']):  # Need update
 
@@ -450,7 +471,7 @@ def main():
                                 result['changed'] = True
                             else:
                                 # Opps can't update
-                                module.fail_json(msg=to_native(upd_json['error']))
+                                module.fail_json(msg=to_native(str(upd_json['error']).strip("[]{}'")))
 
                         elif state == 'present' and (domain_obj_msg['Domain'] == dc_data['Domain']):  # Identicals configurations
                             # The current configuration is identical to the new configuration, there is nothing to do

@@ -62,7 +62,7 @@ status:
   description:
   - Recovered states
   returned: success
-  type: complex
+  type: list
   sample: [
             {
                 "DateTime": [
