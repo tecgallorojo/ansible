@@ -240,7 +240,7 @@ msg:
 '''
 
 import json
-import pdb
+# import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -396,7 +396,7 @@ def main():
         #
         # Here the action begins
         #
-        pdb.set_trace()
+        # pdb.set_trace()
 
         # List of configured domains
         chk_code, chk_msg, chk_data = idg_mgmt.api_call(IDG_API.URI_DOMAIN_LIST, method='GET')
