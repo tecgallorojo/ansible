@@ -31,7 +31,7 @@ idg_endpoint_spec.update(
 )
 
 
-class IDG_Utils(object):
+class IDGUtils(object):
     """ Class class with very useful things """
 
     #############################
@@ -52,7 +52,7 @@ class IDG_Utils(object):
     @staticmethod
     def implement_check_mode(module, result):
         if module.check_mode:
-            result['msg'] = IDG_Utils.CHECK_MODE_MESSAGE
+            result['msg'] = IDGUtils.CHECK_MODE_MESSAGE
             module.exit_json(**result)
 
     @staticmethod

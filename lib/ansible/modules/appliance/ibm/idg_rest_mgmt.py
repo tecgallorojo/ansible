@@ -114,6 +114,11 @@ payload:
         }
 '''
 
+# Version control
+__MODULE_NAME="idg_rest_mgmt"
+__MODULE_VERSION="1.0"
+__MODULE_FULLNAME=__MODULE_NAME + '-' + __MODULE_VERSION
+
 import json
 # import pdb
 
@@ -122,8 +127,8 @@ from ansible.module_utils._text import to_native
 
 # Common package of our implementation for IDG
 try:
-    from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDG_Utils
-    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDG_API
+    from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils
+    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi
     HAS_IDG_DEPS = True
 except ImportError:
     HAS_IDG_DEPS = False
@@ -151,7 +156,7 @@ def main():
     try:
 
         # Parse arguments to dict
-        idg_data_spec = IDG_Utils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDG_Utils.ANSIBLE_VERSION)
+        idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
         payload = json.dumps(module.params['payload']) if module.params['payload'] else None
 
         # Customize the result
@@ -160,16 +165,16 @@ def main():
         result.update({"http_code": None, "http_phrase": None, "payload": None})
 
         # Init IDG API connect
-        idg_mgmt = IDG_API(ansible_module=module,
-                           idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
-                           headers=IDG_Utils.BASIC_HEADERS,
-                           http_agent=IDG_Utils.HTTP_AGENT_SPEC,
-                           use_proxy=idg_data_spec['use_proxy'],
-                           timeout=idg_data_spec['timeout'],
-                           validate_certs=idg_data_spec['validate_certs'],
-                           user=idg_data_spec['user'],
-                           password=idg_data_spec['password'],
-                           force_basic_auth=IDG_Utils.BASIC_AUTH_SPEC)
+        idg_mgmt = IDGApi(ansible_module=module,
+                          idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
+                          headers=IDGUtils.BASIC_HEADERS,
+                          http_agent=IDGUtils.HTTP_AGENT_SPEC,
+                          use_proxy=idg_data_spec['use_proxy'],
+                          timeout=idg_data_spec['timeout'],
+                          validate_certs=idg_data_spec['validate_certs'],
+                          user=idg_data_spec['user'],
+                          password=idg_data_spec['password'],
+                          force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
         #
         # Here the action begins
@@ -180,13 +185,13 @@ def main():
         # Do request
         result['http_code'], result['http_phrase'], result['payload'] = idg_mgmt.api_call(module.params['uri'], method=module.params['method'],
                                                                                           data=payload)
-        result['msg'] = IDG_Utils.COMPLETED_MESSAGE
+        result['msg'] = IDGUtils.COMPLETED_MESSAGE
         result['changed'] = True
         result['failed'] = True if result['http_code'] >= 400 else False
 
     except Exception as e:
         # Uncontrolled exception
-        module.fail_json(msg=(IDG_Utils.UNCONTROLLED_EXCEPTION + '. {0}').format(to_native(e)))
+        module.fail_json(msg=(IDGUtils.UNCONTROLLED_EXCEPTION + '. {0}').format(to_native(e)))
     else:
         # That's all folks!
         module.exit_json(**result)

@@ -9,7 +9,7 @@ __metaclass__ = type
 from ansible.module_utils.six.moves.urllib.error import HTTPError
 from ansible.module_utils._text import to_native
 from ansible.module_utils.urls import open_url, ConnectionError, SSLValidationError
-from ansible.module_utils.six import string_types
+from ansible.module_utils.six import string_types, iteritems, iterkeys
 
 import json
 from time import sleep
@@ -20,7 +20,77 @@ from time import sleep
 #############################
 
 
-class IDG_API(object):
+class AbstractListDict(object):
+    """
+    Class for the management of the variable result of the api.
+    When return a dictionary or list of dictionaries. """
+
+    def __init__(self, result):
+        self.data=[]
+        self.k=set()
+        self.d={}
+
+        if isinstance(result, dict):
+            self.data = [result]
+        elif isinstance(result, list):
+            self.data = result
+
+        for d in self.data:
+            self.k.update(iterkeys(d))
+            for k, v in iteritems(d):
+                if k not in iterkeys(self.d):
+                    self.d.update({k: [v]})
+                else:
+                    self.d[k].append(v)
+
+    def keys(self):
+        return list(self.k)
+
+    def values(self, **kwargs):
+        return self.d[kwargs['key']]
+
+
+class AbstractListStr(object):
+    """
+    Class for the management of the variable result of the api.
+    When return a string or list of strings. """
+
+    def __init__(self, data):
+        self.data=[]
+        self.SEP=';'
+        if data != []:
+            self.set_data(data)
+
+    def __repr__(self):
+        return self.SEP.join(self.data)
+
+    def __str__(self):
+        return self.__repr__()
+
+    def set_data(self, data):
+        if isinstance(data, string_types):
+            self.data = [data]
+        elif isinstance(data, list):
+            self.data = data
+
+    def add_data(self, data):
+        if isinstance(data, string_types):
+            self.data += [data]
+        elif isinstance(data, list):
+            self.data += data
+
+    def values(self):
+        return self.data
+
+class ErrorHandler(AbstractListStr):
+    """
+    Specialization for error handling """
+
+    def __repr__(self):
+            return to_native(" Details: " + super(ErrorHandler, self).__repr__())
+
+
+class IDGApi(object):
     """ Class for managing communication with
         the IBM DataPower Gateway """
 
@@ -36,13 +106,16 @@ class IDG_API(object):
     URI_DOMAIN_STATUS = "/mgmt/status/default/DomainStatus"
     # Actions
     URI_ACTION = "/mgmt/actionqueue/{0}"
+    # File and directory management
+    URI_FILESTORE = "/mgmt/filestore/{0}"
 
     # Errors strings
+    GENERAL_ERROR = 'Error in module "{0}" when implementing the state "{1}" in the domain "{2}".'
     ERROR_GET_DOMAIN_LIST = 'Unable to retrieve domain settings'
     ERROR_RETRIEVING_STATUS = 'Retrieving the status of "{0}" over domain "{1}".'
     ERROR_RETRIEVING_RESULT = 'Retrieving the result of "{0}" over domain "{1}".'
     ERROR_ACCEPTING_ACTION = 'Accepting "{0}" over domain "{1}".'
-    ERROR_REACH_STATE = 'Unable to reach state "{0}" in domain {1}.'
+    ERROR_REACH_STATE = 'Unable to reach state "{0}" in domain "{1}".'
     ERROR_NOT_DOMAIN = 'Domain not exist!.'
 
     def __init__(self, **kwargs):
