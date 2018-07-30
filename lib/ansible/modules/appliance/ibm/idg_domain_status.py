@@ -74,9 +74,9 @@ domain_status:
 '''
 
 # Version control
-__MODULE_NAME="idg_domain_status"
-__MODULE_VERSION="1.0"
-__MODULE_FULLNAME=__MODULE_NAME + '-' + __MODULE_VERSION
+__MODULE_NAME = "idg_domain_status"
+__MODULE_VERSION = "1.0"
+__MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 import json
 import re
@@ -89,15 +89,18 @@ from ansible.module_utils._text import to_native
 try:
     from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils
     from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, ErrorHandler
-    HAS_IDG_DEPS = Trueexcept ImportError:
-    HAS_IDG_DEPS = Fals
+    HAS_IDG_DEPS = True
+except ImportError:
+    HAS_IDG_DEPS = False
 
-ef main():
+
+def main():
+
     module_args = dict(
-    filter=dict(type='str', required=False, default=None),  # Domain to search
-    ignore_case=dict(type='bool', required=False, default=True),  # Domain to search
-    idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
-)
+        filter=dict(type='str', required=False, default=None),  # Domain to search
+        ignore_case=dict(type='bool', required=False, default=True),  # Domain to search
+        idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
+    )
 
     # AnsibleModule instantiation
     module = AnsibleModule(

@@ -112,12 +112,12 @@ msg:
 '''
 
 # Version control
-__MODULE_NAME="idg_domain_chkpoint"
-__MODULE_VERSION="1.0"
-__MODULE_FULLNAME=__MODULE_NAME + '-' + __MODULE_VERSION
+__MODULE_NAME = "idg_domain_chkpoint"
+__MODULE_VERSION = "1.0"
+__MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 import json
-# import pdb
+import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -304,7 +304,7 @@ def main():
                     # If the user is working in only check mode we do not want to make any changes
                     IDGUtils.implement_check_mode(module, result)
 
-                    # pdb.set_trace()
+                    pdb.set_trace()
                     bak_code, bak_msg, bak_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
                                                                     data=json.dumps(rollback_act_msg))
 

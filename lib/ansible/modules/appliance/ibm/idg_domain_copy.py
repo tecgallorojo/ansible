@@ -14,10 +14,11 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 DOCUMENTATION = '''
 ---
 
-module: idg_domain_file
-short_description: Module for managing directories and files
+module: idg_domain_copy
+short_description: Copies files to remote IDGs
 description:
-  - Module for managing directories and files
+  - The idg_domain_copy module upload a file from the local or remote IDG to a location on the remote IDG.
+  - Use the idg_domain_fetch module to download files from remote IDGs to the local box.
 version_added: "2.7"
 options:
 
@@ -26,20 +27,32 @@ options:
       - Domain identifier.
     required: True
 
-  path:
+  backup:
     description:
-      - Path to the file or directory being managed
+      - Create a backup file including the timestamp information so you can get the original file back if something went wrong
+    default: False
+    type: bool
+
+  remote_src:
+    description:
+      - If True it will go to the remote/target IDG for the src.
+    default: False
+    type: bool
+
+  checksum:
+    description:
+      - SHA1 checksum of the file being transferred. Used to validate that the copy of the file was successful.
+    default: False
+
+  src:
+    description:
+      - Local path to a file to copy to the remote server; can be absolute or relative. If path is a directory, it is copied recursively.
     required: True
 
-  state:
+  dest:
     description:
-      - If directory, all intermediate subdirectories will be created if they do not exist. If file, the file will NOT be created if it does not exist.
-      - If absent, directories will be recursively delete.
-    required: False
-    default: directory
-    choices:
-      - absent
-      - directory
+      - Remote absolute path where the file should be copied to. If src is a directory, this must be a directory too.
+    required: True
 
 extends_documentation_fragment: idg
 
@@ -62,19 +75,12 @@ EXAMPLES = '''
 
   tasks:
 
-  - name: Create directory
-    idg_domain_file:
+  - name: Upload transform
+    idg_domain_copy:
         idg_connection: "{{ remote_idg }}"
         domain: dev
-        path: local:/backup
-        state: directory
-
-  - name: Delefe file
-    idg_domain_file:
-        idg_connection: "{{ remote_idg }}"
-        domain: dev
-        path: local:/backup/july-2016.xsl
-        state: absent
+        src: /home/developer/xsls/transform.xsl
+        dest: local:///xsls/transform.xsl
 
 '''
 
@@ -85,20 +91,36 @@ msg:
   returned: always
   type: string
   sample:
-    - Directory was created.
+    - File has been created.
 
-path:
+size:
   description:
-    - Path to the file or directory managed
+    - Size of the target, after execution
+  returned: success
+  type: int
+  sample:
+    - 1220
+
+checksum:
+  description:
+    - SHA1 checksum of the file after running copy
   returned: success
   type: string
   sample:
-    - local:/backup
-    - local:/backup/july-2016.xsl
+    - 6e642bb8dd5c2e027bf21dd923337cbb4214f827
+
+backup_file:
+  description:
+    - Name of backup file created
+  returned: success
+  type: string
+  sample:
+    - local:///xsls/transform.xsl_20180715T1425
+
 '''
 
 # Version control
-__MODULE_NAME = "idg_domain_file"
+__MODULE_NAME = "idg_domain_copy"
 __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
@@ -174,7 +196,7 @@ def main():
         ldir = parse.scheme  # Local directory
         rpath = parse.path  # Relative path
         path_as_list = [d for d in rpath.split('/') if d.strip() != '']
-        td = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), ldir])  # Path prefix
+        td='/'.join([IDGApi.URI_FILESTORE.format(domain_name),ldir])  # Path prefix
 
         result_msg = ''
 
@@ -186,7 +208,7 @@ def main():
 
                 if ck_code == 200 and ck_msg == 'OK':
 
-                    td = '/'.join([td, d])
+                    td='/'.join([td, d])
 
                     if 'directory' in ck_data['filestore']['location'].keys():
                         filestore_abst = AbstractListDict(ck_data['filestore']['location']['directory'])  # Search between directories
@@ -194,17 +216,17 @@ def main():
                         filestore_abst = AbstractListDict({})  # Not contain directories
 
                     if td in filestore_abst.values(key='href'):  # if directory exist
-                        result_msg = IDGUtils.IMMUTABLE_MESSAGE
+                        result_msg=IDGUtils.IMMUTABLE_MESSAGE
                     else:  # Not exist, create it
 
                         # If the user is working in only check mode we do not want to make any changes
                         IDGUtils.implement_check_mode(module, result)
 
-                        create_dir_msg['directory']['name'] = d
+                        create_dir_msg['directory']['name']=d
                         cr_code, cr_msg, cr_data = idg_mgmt.api_call(td, method='PUT', data=json.dumps(create_dir_msg))
 
                         if cr_code == 201 and cr_msg == 'Created':
-                            result_msg = cr_data['result']
+                            result_msg=cr_data['result']
                             changed = True
                         else:
                             module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(cr_data['error'])))
@@ -218,14 +240,14 @@ def main():
             # If the user is working in only check mode we do not want to make any changes
             IDGUtils.implement_check_mode(module, result)
 
-            td = '/'.join([td] + path_as_list)
+            td='/'.join([td] + path_as_list)
             rm_code, rm_msg, rm_data = idg_mgmt.api_call(td, method='DELETE')
 
             if rm_code == 200 and rm_msg == 'OK':
-                result_msg = rm_data['result']
+                result_msg=rm_data['result']
                 changed = True
             elif rm_code == 404 and rm_msg == 'Not Found':
-                result_msg = IDGUtils.IMMUTABLE_MESSAGE
+                result_msg=IDGUtils.IMMUTABLE_MESSAGE
             else:
                 module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(rm_data['error'])))
 

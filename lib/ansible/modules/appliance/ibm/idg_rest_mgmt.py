@@ -115,9 +115,9 @@ payload:
 '''
 
 # Version control
-__MODULE_NAME="idg_rest_mgmt"
-__MODULE_VERSION="1.0"
-__MODULE_FULLNAME=__MODULE_NAME + '-' + __MODULE_VERSION
+__MODULE_NAME = "idg_rest_mgmt"
+__MODULE_VERSION = "1.0"
+__MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 import json
 # import pdb
