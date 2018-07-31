@@ -49,6 +49,11 @@ class IDGUtils(object):
     BASIC_AUTH_SPEC = True
     HTTP_AGENT_SPEC = None
 
+    #  Directory structure of the file system
+    IDG_DIRS = ["cert:", "chkpoints:", "config:", "export:", "image:", "isamcert:",
+                "isamconfig:", "isamwebroot:", "local:", "logstore:", "logtemp:", "policyframework:",
+                "pubcert:", "sharedcert:", "store:", "tasktemplates:", "temporary:"]
+
     @staticmethod
     def implement_check_mode(module, result):
         if module.check_mode:
