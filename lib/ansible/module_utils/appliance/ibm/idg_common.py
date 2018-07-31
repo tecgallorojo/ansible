@@ -31,6 +31,11 @@ idg_endpoint_spec.update(
 )
 
 
+# Custom exception
+class IDGException(Exception):
+    pass
+
+
 class IDGUtils(object):
     """ Class class with very useful things """
 
@@ -42,6 +47,7 @@ class IDGUtils(object):
     COMPLETED_MESSAGE = 'Completed'
     CHECK_MODE_MESSAGE = 'Change was only simulated, due to enabling verification mode'
     UNCONTROLLED_EXCEPTION = 'Unknown exception'
+    ERROR_IMPORT_MODULE = 'The IDG utils modules is required'
 
     # Connection agreements
     BASIC_HEADERS = {"Content-Type": "application/json"}

@@ -121,6 +121,9 @@ __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 import json
 import os
 import os.path
+import shutil
+import tempfile
+import base64
 import pdb
 
 from ansible.module_utils.basic import AnsibleModule
@@ -129,11 +132,61 @@ from ansible.module_utils.six.moves.urllib.parse import urlparse
 
 # Common package of our implementation for IDG
 try:
-    from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils
+    from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils, IDGException
     from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, AbstractListDict, ErrorHandler
     HAS_IDG_DEPS = True
 except ImportError:
     HAS_IDG_DEPS = False
+
+
+def download_filestore(idg_mgmt, tmp_dir, domain_name, src_ldir, src_path_list):
+
+    if isinstance(src_path_list, list):
+        api_path = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), src_ldir] + src_path_list)
+    else:
+        api_path = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), src_ldir] + [src_path_list])
+
+    ck_code, ck_msg, ck_data = idg_mgmt.api_call(api_path, method='GET')
+
+    if ck_code == 200 and ck_msg == 'OK':
+        # Target found
+
+        if 'filestore' in ck_data.keys():  # is directory
+
+            os.makedirs(os.sep.join([tmp_dir, src_ldir] + src_path_list))
+
+            if 'directory' in ck_data['filestore']['location'].keys():
+                dir_abst = AbstractListDict(ck_data['filestore']['location']['directory'])  # Get directories
+
+                for di in dir_abst.values(key='name'):
+                    parse = urlparse(di)
+                    rpath = parse.path  # Relative path
+                    path_list = [d for d in rpath.split('/') if d.strip() != '']
+                    download_filestore(idg_mgmt, tmp_dir, domain_name, src_ldir, path_list)
+
+
+            if 'file' in ck_data['filestore']['location'].keys():
+                file_abst = AbstractListDict(ck_data['filestore']['location']['file'])  # Get files
+
+                for fi in file_abst.values(key='name'):
+                    download_filestore(idg_mgmt, tmp_dir, domain_name, src_ldir, fi)
+
+        else:  # is file
+            get_code, get_msg, get_data = idg_mgmt.api_call(api_path, method='GET')
+            if get_code == 200 and get_msg == 'OK':
+
+                os.makedirs(os.sep.join([tmp_dir, src_ldir] + src_path_list[:-1]))
+                with open(os.sep.join([tmp_dir, src_ldir] + src_path_list), 'wb') as f:
+                    f.write(base64.b64decode(get_data['file']))
+
+            else:
+                raise IDGException(IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(get_data['error'])))
+
+    elif ck_code == 404 and ck_msg == 'Not Found':
+        # Target not found
+        raise IDGException(IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(ck_data['error'])))
+    else:
+        raise IDGException(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name))
 
 
 def main():
@@ -155,7 +208,7 @@ def main():
 
     # Validates the dependence of the utility module
     if not HAS_IDG_DEPS:
-        module.fail_json(msg="The IDG utils module is required")
+        module.fail_json(msg=IDGUtils.ERROR_IMPORT_MODULE)
 
     try:
 
@@ -165,18 +218,20 @@ def main():
         backup = module.params['backup']
         changed = False
 
+        tmp_dir=''  # Directory for processing on the control host
+
         src = module.params['src']
         _src_parse = urlparse(src)
-        _src_ldir = parse.scheme  # Local directory
-        _src_rpath = parse.path  # Relative path
+        _src_ldir = _src_parse.scheme  # Local directory
+        _src_rpath = _src_parse.path  # Relative path
         _src_path_list = [d for d in _src_rpath.split('/') if d.strip() != '']
 
         dest = module.params['dest']
         _dest_parse = urlparse(dest)
-        _dest_ldir = parse.scheme  # Local directory
-        if _dest_ldir + ':' not in IDG_DIRS:
+        _dest_ldir = _dest_parse.scheme  # Local directory
+        if _dest_ldir + ':' not in IDGUtils.IDG_DIRS:
             module.fail_json(msg="Base directory of the destination file {0} does not correspond to what is specified for datapower.".format(dest))
-        _dest_rpath = parse.path  # Relative path
+        _dest_rpath = _dest_parse.path  # Relative path
         _dest_path_list = [d for d in _dest_rpath.split('/') if d.strip() != '']
 
         # Customize the result
@@ -200,26 +255,20 @@ def main():
         # Here the action begins
         #
 
-        b_src = to_bytes(src, errors='surrogate_or_strict')
-        # Make sure we always have a directory component for later processing
-        if os.path.sep not in dest:
-            dest = '.{0}{1}'.format(os.path.sep, dest)
-        b_dest = to_bytes(dest, errors='surrogate_or_strict')
-        _original_basename = module.params.get('_original_basename', None)
-        validate = module.params.get('validate', None)
-
-        if not os.path.exists(b_src):
-            module.fail_json(msg="Source %s not found" % (src))
-        if not os.access(b_src, os.R_OK):
-            module.fail_json(msg="Source %s not readable" % (src))
-        if os.path.isdir(b_src):
-            module.fail_json(msg="Remote copy does not support recursive copy of directory: %s" % (src))
-
-
         pdb.set_trace()
 
-        if _src_ldir + ':' in IDG_DIRS:  # The copy is between remote files
-            pass
+        if _src_ldir + ':' in IDGUtils.IDG_DIRS:  # The copy is between remote files
+
+            tmp_dir = tempfile.mkdtemp()  # create temp directory
+            try:
+
+                download_filestore(idg_mgmt, tmp_dir, domain_name, _src_ldir, _src_path_list)
+
+            finally:
+                pass
+                # Clean
+                # shutil.rmtree(tmp_dir)
+
             # Get the file
             # if directory error
             # else
@@ -238,24 +287,17 @@ def main():
         else:
             module.fail_json(msg="Source {0} is not supported.".format(src))
 
-        # Do request
-        parse = urlparse(path)
-        ldir = parse.scheme  # Local directory
-        rpath = parse.path  # Relative path
-        path_as_list = [d for d in rpath.split('/') if d.strip() != '']
-        td='/'.join([IDGApi.URI_FILESTORE.format(domain_name),ldir])  # Path prefix
-        result_msg = ''
-
-
         # Finish
         result['msg'] = result_msg
         result['changed'] = changed
 
     except Exception as e:
         # Uncontrolled exception
+        # shutil.rmtree(tmp_dir)
         module.fail_json(msg=(IDGUtils.UNCONTROLLED_EXCEPTION + '. {0}').format(to_native(e)))
     else:
         # That's all folks!
+        # shutil.rmtree(tmp_dir)
         module.exit_json(**result)
 
 

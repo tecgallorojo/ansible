@@ -111,6 +111,7 @@ class IDGApi(object):
 
     # Errors strings
     GENERAL_ERROR = 'Error in module "{0}" when implementing the state "{1}" in the domain "{2}".'
+    GENERAL_STATELESS_ERROR = 'Error in module "{0}" and domain "{1}".'
     ERROR_GET_DOMAIN_LIST = 'Unable to retrieve domain settings'
     ERROR_RETRIEVING_STATUS = 'Retrieving the status of "{0}" over domain "{1}".'
     ERROR_RETRIEVING_RESULT = 'Retrieving the result of "{0}" over domain "{1}".'

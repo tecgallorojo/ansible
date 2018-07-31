@@ -151,7 +151,7 @@ def main():
 
     # Validates the dependence of the utility module
     if not HAS_IDG_DEPS:
-        module.fail_json(msg="The IDG utils module is required")
+        module.fail_json(msg=IDGUtils.ERROR_IMPORT_MODULE)
 
     try:
 
