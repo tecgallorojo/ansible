@@ -124,6 +124,7 @@ import os.path
 import shutil
 import tempfile
 import base64
+from zipfile import ZipFile, BadZipfile
 import pdb
 
 from ansible.module_utils.basic import AnsibleModule
@@ -137,56 +138,6 @@ try:
     HAS_IDG_DEPS = True
 except ImportError:
     HAS_IDG_DEPS = False
-
-
-def download_filestore(idg_mgmt, tmp_dir, domain_name, src_ldir, src_path_list):
-
-    if isinstance(src_path_list, list):
-        api_path = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), src_ldir] + src_path_list)
-    else:
-        api_path = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), src_ldir] + [src_path_list])
-
-    ck_code, ck_msg, ck_data = idg_mgmt.api_call(api_path, method='GET')
-
-    if ck_code == 200 and ck_msg == 'OK':
-        # Target found
-
-        if 'filestore' in ck_data.keys():  # is directory
-
-            os.makedirs(os.sep.join([tmp_dir, src_ldir] + src_path_list))
-
-            if 'directory' in ck_data['filestore']['location'].keys():
-                dir_abst = AbstractListDict(ck_data['filestore']['location']['directory'])  # Get directories
-
-                for di in dir_abst.values(key='name'):
-                    parse = urlparse(di)
-                    rpath = parse.path  # Relative path
-                    path_list = [d for d in rpath.split('/') if d.strip() != '']
-                    download_filestore(idg_mgmt, tmp_dir, domain_name, src_ldir, path_list)
-
-
-            if 'file' in ck_data['filestore']['location'].keys():
-                file_abst = AbstractListDict(ck_data['filestore']['location']['file'])  # Get files
-
-                for fi in file_abst.values(key='name'):
-                    download_filestore(idg_mgmt, tmp_dir, domain_name, src_ldir, fi)
-
-        else:  # is file
-            get_code, get_msg, get_data = idg_mgmt.api_call(api_path, method='GET')
-            if get_code == 200 and get_msg == 'OK':
-
-                os.makedirs(os.sep.join([tmp_dir, src_ldir] + src_path_list[:-1]))
-                with open(os.sep.join([tmp_dir, src_ldir] + src_path_list), 'wb') as f:
-                    f.write(base64.b64decode(get_data['file']))
-
-            else:
-                raise IDGException(IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(get_data['error'])))
-
-    elif ck_code == 404 and ck_msg == 'Not Found':
-        # Target not found
-        raise IDGException(IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(ck_data['error'])))
-    else:
-        raise IDGException(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name))
 
 
 def main():
@@ -250,6 +201,7 @@ def main():
                           force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
         create_file_msg = {"file": {"name": "", "content": ""}}
+        export_action_msg = {"Export": {"Format":"ZIP", "AllFiles":"on", "Persisted":"off", "IncludeInternalFiles":"off", "Object": []}}
 
         #
         # Here the action begins
@@ -257,29 +209,76 @@ def main():
 
         pdb.set_trace()
 
-        if _src_ldir + ':' in IDGUtils.IDG_DIRS:  # The copy is between remote files
+        if _src_ldir + ':' in IDGUtils.IDG_DIRS:  # The copy is between remote targets
 
-            tmp_dir = tempfile.mkdtemp()  # create temp directory
-            try:
+            t_src = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), _src_ldir] + _src_path_list)  # Path prefix
+            ck_code, ck_msg, ck_data = idg_mgmt.api_call(t_src, method='GET')
 
-                download_filestore(idg_mgmt, tmp_dir, domain_name, _src_ldir, _src_path_list)
+            if ck_code == 200 and ck_msg == 'OK':
 
-            finally:
+                if 'filestore' in ck_data.keys():  # Is directory
+
+                    tmp_dir = tempfile.mkdtemp()  # create temp directory
+
+                    try:
+
+                        exp_code, exp_msg, exp_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
+                                                                        data=json.dumps(export_action_msg))
+
+                        if exp_code == 202 and exp_msg == 'Accepted':
+                            # Asynchronous actions export accepted. Wait for complete
+                            state = "download"
+                            action_result = idg_mgmt.wait_for_action_end(IDGApi.URI_ACTION.format(domain_name), href=exp_data['_links']['location']['href'],
+                                                                         state=state)
+
+                            # Export completed. Get result
+                            doex_code, doex_msg, doex_data = idg_mgmt.api_call(exp_data['_links']['location']['href'], method='GET')
+
+                            if doex_code == 200 and doex_msg == 'OK':
+                                # Export ok
+                                try:
+                                    backup_file = os.sep.join([tmp_dir, domain_name + ".zip"])
+                                    with open(backup_file, 'wb') as f:
+                                        f.write(base64.b64decode(doex_data['result']['file']))
+
+                                    ziparch = ZipFile(backup_file)
+                                    ziparch.extractall(tmp_dir)
+
+                                except Exception as e:
+                                    module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
+
+                            else:
+                                # Can't retrieve the export
+                                module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
+
+                        elif exp_code == 200 and exp_msg == 'OK':
+                            # Successfully processed synchronized action
+                            result['msg'] = idg_mgmt.status_text(exp_data['Export'])
+                            result['changed'] = True
+
+                        else:
+                            # Export not accepted
+                            module.fail_json(msg=IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name))
+
+                    finally:
+                        pass
+                        # Clean
+                        shutil.rmtree(tmp_dir)
+
+                else:  # Is file
+
+            elif ck_code == 404 and ck_msg == 'Not Found':
+                # Source not found
+                module.fail_json(msg="Source {0} does not exist.".format(src))
+            else:
+                # Other Errors
                 pass
-                # Clean
-                # shutil.rmtree(tmp_dir)
-
-            # Get the file
-            # if directory error
-            # else
-            # check backup
-            # copy the file
-        elif isdir(src):  # The source is directory
+        elif isdir(src):  # The source is a local directory
             pass
             # Loop over directory
             # check backup
             # upload files and directories recursively
-        elif isfile(src):  # The source is file
+        elif isfile(src):  # The source is a local file
             pass
             # Get the file
             # check backup

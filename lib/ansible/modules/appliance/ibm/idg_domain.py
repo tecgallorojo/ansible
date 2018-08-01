@@ -87,7 +87,7 @@ options:
         to down in a controlled manner.
         C(unquiesced) Bring the operational state of the domain to up
       - Be particularly careful about changing the status to C(restarted).
-        These Will affect all configured services within the domain.
+        These will affect all configured services within the domain.
         C(restarted) all the configuration that has not been saved will be lost.
     default: present
     required: True
@@ -100,7 +100,7 @@ options:
 
   quiesce_conf:
     description:
-      - Only necessary when the I(state)=C(quiesced)
+      - Only necessary when the I(state=quiesced)
     default:
       delay: 0
       timeout: 60

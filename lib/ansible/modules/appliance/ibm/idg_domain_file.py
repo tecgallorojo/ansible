@@ -33,13 +33,19 @@ options:
 
   state:
     description:
-      - If directory, all intermediate subdirectories will be created if they do not exist. If file, the file will NOT be created if it does not exist.
-      - If absent, directories will be recursively delete.
+      - If C(directory), all intermediate subdirectories will be created if they do not exist. If file, the file will B(not) be created if it does not exist.
+      - If C(absent), directories will be recursively delete.
+      - If C(show), shows information about the destination if it is a directory list its content.
+      - If C(move), When you want to move an entire directory do not add the / character at the end.
+        This state requires the I(source) and I(overwrite) parameters.
+      - The C(overwrite) parameter does not apply when working with directories.
     required: False
     default: directory
     choices:
       - absent
       - directory
+      - move
+      - show
 
 extends_documentation_fragment: idg
 
@@ -69,6 +75,15 @@ EXAMPLES = '''
         path: local:/backup
         state: directory
 
+  - name: Move file
+    idg_domain_file:
+        idg_connection: "{{ remote_idg }}"
+        domain: dev
+        path: local:/backup/ErrorCodes-2016.xsl
+        source: local:/ErrorCodes.xml
+        overwrite: False
+        state: absent
+
   - name: Delefe file
     idg_domain_file:
         idg_connection: "{{ remote_idg }}"
@@ -95,6 +110,17 @@ path:
   sample:
     - local:/backup
     - local:/backup/july-2016.xsl
+
+output:
+  description:
+    - List of content of directories or detail of file target
+  returned: success when I(state=show)
+  type: dict
+  sample:
+    - {
+        "directory": [{"name": "local:/XSLs"}, {"name": "local:/XSDs"}, {"name": "local:/XMLs"}],
+        "file": [{"name": "ErrorCodes.xml", "size": 82226, "modified": "2018-08-01 11:09:51"}]
+      }
 '''
 
 # Version control
@@ -121,8 +147,10 @@ except ImportError:
 def main():
 
     module_args = dict(
-        state=dict(type='str', required=False, default='directory', choices=['absent', 'directory']),  # State alternatives
+        state=dict(type='str', required=False, default='directory', choices=['absent', 'directory', 'move', 'show']),  # State alternatives
         path=dict(type='str', required=True),  # Path to resource
+        source=dict(type='str', required=False),  # Source. Only valid when state = move
+        overwrite=dict(type='bool', required=False, default=False),  # overwrite target. Valid when state = move
         domain=dict(type='str', required=True),  # Domain name
         idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
     )
@@ -130,7 +158,8 @@ def main():
     # AnsibleModule instantiation
     module = AnsibleModule(
         argument_spec=module_args,
-        supports_check_mode=True
+        supports_check_mode=True,
+        required_if=[["state", "move", ["source", "overwrite"]]]
     )
 
     # Validates the dependence of the utility module
@@ -162,6 +191,7 @@ def main():
                           force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
         create_dir_msg = {"directory": {"name": ""}}
+        move_file_msg = {"MoveFile": {"sURL": "", "dURL": "", "Overwrite": ""}}
 
         #
         # Here the action begins
@@ -211,6 +241,45 @@ def main():
 
                 else:
                     module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(ck_data['error'])))
+
+        elif state == 'move':  # Move remote files
+            move_file_msg['MoveFile']['sURL'] = module.params['source']
+            move_file_msg['MoveFile']['Overwrite'] = IDGUtils.str_on_off(module.params['overwrite'])
+            move_file_msg['MoveFile']['dURL'] = path
+
+            mv_code, mv_msg, mv_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(move_file_msg))
+
+            if mv_code == 200 and mv_msg == 'OK':
+                result_msg = mv_data['MoveFile']
+                changed = True
+            else:
+                module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(mv_data['error'])))
+
+        elif state == 'show':  # Show details of file or content of directories
+
+            sh_code, sh_msg, sh_data = idg_mgmt.api_call('/'.join([td] + path_as_list), method='GET')
+
+            if sh_code == 200 and sh_msg == 'OK':
+                output = {}
+                if 'filestore' in sh_data.keys():  # is directory
+
+                    if 'directory' in sh_data['filestore']['location'].keys():
+                        output['directory'] = [{"name": i["name"]} for i in AbstractListDict(sh_data['filestore']['location']['directory']).raw_data()]
+
+                    if 'file' in sh_data['filestore']['location'].keys():
+                        output['file'] = [{"name": i["name"], "size": i["size"], "modified": i["modified"]} for i in AbstractListDict(sh_data['filestore']['location']['file']).raw_data()]
+                else:
+                    fi_code, fi_msg, fi_data = idg_mgmt.api_call('/'.join([td] + path_as_list[:-1]), method='GET')
+
+                    if fi_code == 200 and fi_msg == 'OK':
+                        output = [{"name": i["name"], "size": i["size"], "modified": i["modified"]} for i in fi_data['filestore']['location']['file'] if i['name'] == path_as_list[-1]]
+                    else:
+                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(fi_data['error'])))
+
+                result['output'] = output
+
+            else:
+                module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(sh_data['error'])))
 
         else:  # state = 'absent'
             # Remove directory recursively

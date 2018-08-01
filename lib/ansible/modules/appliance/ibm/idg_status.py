@@ -23,8 +23,8 @@ options:
   parameters:
     description: >
       Define a list of types of parameters to retrieve. The parameters are grouped in the following categories:
-      All, Battery, Crypto, Sensors, DateTime, Temperature, Network, Failure, Firmware, Platform, Library, License,
-      NTP, Raid, SNMP, Cloud, Balanced, Services, Standby, System
+      C(All), C(Battery), C(Crypto), C(Sensors), C(DateTime), C(Temperature), C(Network), C(Failure), C(Firmware), C(Platform), C(Library), C(License),
+      C(NTP), C(Raid), C(SNMP), C(Cloud), C(Balanced), C(Services), C(Standby), C(System)
     default:
         - All
     required: True

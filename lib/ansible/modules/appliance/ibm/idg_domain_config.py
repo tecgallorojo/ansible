@@ -30,7 +30,7 @@ options:
         C(reseted) will delete all configured services within the domain.
         C(exported), C(imported), C(saved) domain settings
       - Be particularly careful about changing the status C(reseted).
-        These will deletes all configuration data in the domain.
+        These will B(deletes all configuration) data in the domain.
     default: saved
     required: True
     choices:
@@ -46,54 +46,54 @@ options:
   all_files:
     description:
       - Include all files in the local directory for the domain?
-      - Only be taken into account during the export
+      - Only be taken into account when I(state=exported)
     default: False
     type: bool
 
   persisted:
     description:
       - Export from persisted or running configuration?
-      - Only be taken into account during the export
+      - Only be taken into account when I(state=exported)
     default: False
     type: bool
 
   internal_files:
     description:
       - Export internal configuration files?
-      - Only be taken into account during the export
+      - Only be taken into account when I(state=exported)
     default: True
     type: bool
 
   input_file:
     description:
       - The base64-encoded BLOB to import
-      - Only be taken into account during the import
+      - Only be taken into account when I(state=imported)
 
   overwrite_files:
     description:
       - Overwrite local files
-      - Only be taken into account during the import
+      - Only be taken into account when I(state=imported)
     default: False
     type: bool
 
   overwrite_objects:
     description:
       - Overwrite objects that exist
-      - Only be taken into account during the import
+      - Only be taken into account when I(state=imported)
     default: False
     type: bool
 
   dry_run:
     description:
       - Import package (on) or validate the import operation without importing (off).
-      - Only be taken into account during the import
+      - Only be taken into account when I(state=imported)
     default: False
     type: bool
 
   rewrite_local_ip:
     description:
       - The local address bindings of services in the import package are rewritten on import to their equivalent interfaces
-      - Only be taken into account during the import
+      - Only be taken into account I(state=imported)
     default: False
     type: bool
 
