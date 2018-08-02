@@ -32,6 +32,13 @@ options:
       - Remote absolute path where the file should be copied to. If src is a directory, this must be a directory too.
     required: True
 
+  recursive:
+    description:
+      - Indicates that you want to recursively download the contents of a directory.
+      - Only applies to the local:/ directory.
+    default: False
+    type: bool
+
 extends_documentation_fragment: idg
 
 author:
@@ -58,7 +65,6 @@ EXAMPLES = '''
         idg_connection: "{{ remote_idg }}"
         domain: dev
         path: "local:/XMLs/ErrorCodes.xml"
-
 '''
 
 RETURN = '''
@@ -72,11 +78,21 @@ msg:
 
 file:
   description:
-    - Content of the file or files of the requested directory
-  returned: success
+    - Content of the file or files of the requested directory.
+    - When I(recursive=false)
+  returned: when success and not recursive
   type: complex
   sample: [{"name": "ErrorCodes.xml", "file": "PD94bWw...YW1lPgo"},
            {"name": "Properties.xml", "file": "RlIGluZ...ZCAgY29u"}]
+
+directory:
+  description:
+    - Compressed and base64 content of the requested directory
+    - When I(recursive=true)
+  returned: when success and recursive
+  type: string
+  sample: "PD94bWw...YW1lPgo"
+
 '''
 
 # Version control
@@ -85,6 +101,11 @@ __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 import json
+import tempfile
+import os
+import shutil
+import base64
+from zipfile import ZipFile, ZIP_DEFLATED
 import pdb
 
 from ansible.module_utils.basic import AnsibleModule
@@ -102,27 +123,29 @@ except ImportError:
 
 def main():
 
-    module_args = dict(
-        domain=dict(type='str', required=True),  # Domain name
-        path=dict(type='str', required=True),  # Remote absolute path for file or directory
-        idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
-    )
-
-    # AnsibleModule instantiation
-    module = AnsibleModule(
-        argument_spec=module_args,
-        supports_check_mode=True
-    )
-
     # Validates the dependence of the utility module
     if not HAS_IDG_DEPS:
         module.fail_json(msg=IDGUtils.ERROR_IMPORT_MODULE)
 
     try:
 
+        module_args = dict(
+            domain=dict(type='str', required=True),  # Domain name
+            path=dict(type='str', required=True),  # Remote absolute path for file or directory
+            recursive=dict(type='bool', required=False, default=False),  # Download recursively
+            idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
+        )
+
+        # AnsibleModule instantiation
+        module = AnsibleModule(
+            argument_spec=module_args,
+            supports_check_mode=True
+        )
+
         # Parse arguments to dict
         idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
         domain_name = module.params['domain']
+        recursive = module.params['recursive']
 
         path = module.params['path']
         _pparse = urlparse(path)
@@ -142,11 +165,11 @@ def main():
                           password=idg_data_spec['password'],
                           force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
+        export_action_msg = {"Export": {"Format":"ZIP", "AllFiles":"on", "Persisted":"off", "IncludeInternalFiles":"off", "Object": []}}
+
         #
         # Here the action begins
         #
-
-        pdb.set_trace()
 
         if _pldir + ':' in IDGUtils.IDG_DIRS:  # Base IDG directory is OK
 
@@ -157,22 +180,83 @@ def main():
 
                 if 'filestore' in ck_data.keys():  # Is directory
 
-                    if 'file' in ck_data['filestore']['location'].keys():
+                    if recursive:  # recursively download the entire directory
 
-                        files_names = [i for i in AbstractListDict(ck_data['filestore']['location']['file']).values(key='name')]
-                        files = []
-                        for f in files_names:
+                        tmp_dir = tempfile.mkdtemp()  # create temp directory
 
-                            dw_code, dw_msg, dw_data = idg_mgmt.api_call(api_uri + '/' + f, method='GET')
-                            if dw_code == 200 and dw_msg == 'OK':
-                                files.append({"name": f, "file": dw_data['file']})
+                        try:
+                            state = "Download remote directory"
+                            exp_code, exp_msg, exp_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
+                                                                            data=json.dumps(export_action_msg))
+
+                            if exp_code == 202 and exp_msg == 'Accepted':
+                                # Asynchronous actions export accepted. Wait for complete
+                                _ = idg_mgmt.wait_for_action_end(IDGApi.URI_ACTION.format(domain_name), href=exp_data['_links']['location']['href'],
+                                                                 state=state)
+                                # Export completed. Get result
+                                doex_code, doex_msg, doex_data = idg_mgmt.api_call(exp_data['_links']['location']['href'], method='GET')
+
+                                if doex_code == 200 and doex_msg == 'OK':
+                                    # Export ok
+                                    try:
+                                        # Unzip backup in temporary directory
+                                        backup_file = os.sep.join([tmp_dir, domain_name + ".zip"])
+                                        with open(backup_file, 'wb') as f:
+                                            f.write(base64.b64decode(doex_data['result']['file']))
+
+                                        ziparch = ZipFile(backup_file)
+                                        ziparch.extractall(tmp_dir)
+
+                                        # Compress directory
+                                        local_target = os.sep.join([tmp_dir, _pldir] + _ppath_list)
+                                        local_target_zip = _ppath_list[-1] + '.zip'
+                                        local_target_home = os.path.dirname(local_target)
+
+                                        os.chdir(local_target_home)
+                                        with ZipFile(local_target_zip, "w", ZIP_DEFLATED, allowZip64=True) as zf:
+                                            for root, _, filenames in os.walk(os.path.basename(local_target)):
+                                                for name in filenames:
+                                                    name = os.path.join(root, name)
+                                                    name = os.path.normpath(name)
+                                                    zf.write(name, name)
+
+                                        with open(os.sep.join([local_target_home, local_target_zip]), "rb") as zf:
+                                            encoded_file = base64.b64encode(zf.read())
+
+                                        result['directory'] = encoded_file
+
+                                    except Exception as e:
+                                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name))
+
+                                else:
+                                    # Can't retrieve the export
+                                    module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
+
                             else:
-                                module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(dw_data['error'])))
+                                # Export not accepted
+                                module.fail_json(msg=IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name))
 
-                        result['files'] = files
+                        finally:
+                            # Clean
+                            shutil.rmtree(tmp_dir)
 
-                    else:
-                        result['files'] = []
+                    else:  # Only files in the designated directory
+                        if 'file' in ck_data['filestore']['location'].keys():
+
+                            files_names = [i for i in AbstractListDict(ck_data['filestore']['location']['file']).values(key='name')]
+                            files = []
+                            for f in files_names:
+
+                                dw_code, dw_msg, dw_data = idg_mgmt.api_call(api_uri + '/' + f, method='GET')
+                                if dw_code == 200 and dw_msg == 'OK':
+                                    files.append({"name": f, "file": dw_data['file']})
+                                else:
+                                    module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(dw_data['error'])))
+
+                            result['files'] = files
+
+                        else:
+                            result['files'] = []
 
                 else:  # Is file
                     result['files'] = [{"name": _ppath_list[-1], "file": ck_data['file']}]
