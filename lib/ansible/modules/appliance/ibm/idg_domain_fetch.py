@@ -123,12 +123,7 @@ except ImportError:
 
 def main():
 
-    # Validates the dependence of the utility module
-    if not HAS_IDG_DEPS:
-        module.fail_json(msg=IDGUtils.ERROR_IMPORT_MODULE)
-
     try:
-
         module_args = dict(
             domain=dict(type='str', required=True),  # Domain name
             path=dict(type='str', required=True),  # Remote absolute path for file or directory
@@ -141,6 +136,10 @@ def main():
             argument_spec=module_args,
             supports_check_mode=True
         )
+
+        # Validates the dependence of the utility module
+        if not HAS_IDG_DEPS:
+            module.fail_json(msg="The IDG utils modules is required")
 
         # Parse arguments to dict
         idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
@@ -271,6 +270,11 @@ def main():
 
         # Finish
         result['msg'] = IDGApi.COMPLETED
+
+    except (NameError, UnboundLocalError) as e:
+        # Very early error
+        module_except = AnsibleModule(argument_spec={})
+        module_except.fail_json(msg=to_native(e))
 
     except Exception as e:
         # Uncontrolled exception

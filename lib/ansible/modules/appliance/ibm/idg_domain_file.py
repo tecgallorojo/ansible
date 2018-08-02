@@ -146,27 +146,26 @@ except ImportError:
 
 def main():
 
-    module_args = dict(
-        state=dict(type='str', required=False, default='directory', choices=['absent', 'directory', 'move', 'show']),  # State alternatives
-        path=dict(type='str', required=True),  # Path to resource
-        source=dict(type='str', required=False),  # Source. Only valid when state = move
-        overwrite=dict(type='bool', required=False, default=False),  # overwrite target. Valid when state = move
-        domain=dict(type='str', required=True),  # Domain name
-        idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
-    )
-
-    # AnsibleModule instantiation
-    module = AnsibleModule(
-        argument_spec=module_args,
-        supports_check_mode=True,
-        required_if=[["state", "move", ["source", "overwrite"]]]
-    )
-
-    # Validates the dependence of the utility module
-    if not HAS_IDG_DEPS:
-        module.fail_json(msg=IDGUtils.ERROR_IMPORT_MODULE)
-
     try:
+        module_args = dict(
+            state=dict(type='str', required=False, default='directory', choices=['absent', 'directory', 'move', 'show']),  # State alternatives
+            path=dict(type='str', required=True),  # Path to resource
+            source=dict(type='str', required=False),  # Source. Only valid when state = move
+            overwrite=dict(type='bool', required=False, default=False),  # overwrite target. Valid when state = move
+            domain=dict(type='str', required=True),  # Domain name
+            idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
+        )
+
+        # AnsibleModule instantiation
+        module = AnsibleModule(
+            argument_spec=module_args,
+            supports_check_mode=True,
+            required_if=[["state", "move", ["source", "overwrite"]]]
+        )
+
+        # Validates the dependence of the utility module
+        if not HAS_IDG_DEPS:
+            module.fail_json(msg="The IDG utils modules is required")
 
         # Parse arguments to dict
         idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
@@ -301,6 +300,11 @@ def main():
         # Finish
         result['msg'] = result_msg
         result['changed'] = changed
+
+    except (NameError, UnboundLocalError) as e:
+        # Very early error
+        module_except = AnsibleModule(argument_spec={})
+        module_except.fail_json(msg=to_native(e))
 
     except Exception as e:
         # Uncontrolled exception

@@ -133,25 +133,24 @@ except ImportError:
 
 def main():
 
-    # Arguments/parameters that a user can pass to the module
-    module_args = dict(
-        state=dict(type='str', choices=['present', 'absent', 'restored'], default='present'),  # Checkpoint state
-        idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True),  # IDG connection
-        domain=dict(type='str', required=True),  # Domain
-        name=dict(type='str', required=True)  # Checkpoint
-    )
-
-    # AnsibleModule instantiation
-    module = AnsibleModule(
-        argument_spec=module_args,
-        supports_check_mode=True
-    )
-
-    # Validates the dependence of the utility module
-    if not HAS_IDG_DEPS:
-        module.fail_json(msg=IDGUtils.ERROR_IMPORT_MODULE)
-
     try:
+        # Arguments/parameters that a user can pass to the module
+        module_args = dict(
+            state=dict(type='str', choices=['present', 'absent', 'restored'], default='present'),  # Checkpoint state
+            idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True),  # IDG connection
+            domain=dict(type='str', required=True),  # Domain
+            name=dict(type='str', required=True)  # Checkpoint
+        )
+
+        # AnsibleModule instantiation
+        module = AnsibleModule(
+            argument_spec=module_args,
+            supports_check_mode=True
+        )
+
+        # Validates the dependence of the utility module
+        if not HAS_IDG_DEPS:
+            module.fail_json(msg="The IDG utils modules is required")
 
         # Parse arguments to dict
         idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
@@ -345,6 +344,11 @@ def main():
 
         else:  # Can't read domain's lists
             module.fail_json(msg=IDGApi.ERROR_GET_DOMAIN_LIST)
+
+    except (NameError, UnboundLocalError) as e:
+        # Very early error
+        module_except = AnsibleModule(argument_spec={})
+        module_except.fail_json(msg=to_native(e))
 
     except Exception as e:
         # Uncontrolled exception

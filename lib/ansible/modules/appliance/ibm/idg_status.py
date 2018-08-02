@@ -102,22 +102,21 @@ except ImportError:
 
 def main():
 
-    module_args = dict(
-        parameters=dict(type='list', required=False, default=['All']),  # Parameters to recover
-        idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
-    )
-
-    # AnsibleModule instantiation
-    module = AnsibleModule(
-        argument_spec=module_args,
-        supports_check_mode=True
-    )
-
-    # Validates the dependence of the utility module
-    if not HAS_IDG_DEPS:
-        module.fail_json(msg=IDGUtils.ERROR_IMPORT_MODULE)
-
     try:
+        module_args = dict(
+            parameters=dict(type='list', required=False, default=['All']),  # Parameters to recover
+            idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
+        )
+
+        # AnsibleModule instantiation
+        module = AnsibleModule(
+            argument_spec=module_args,
+            supports_check_mode=True
+        )
+
+        # Validates the dependence of the utility module
+        if not HAS_IDG_DEPS:
+            module.fail_json(msg="The IDG utils modules is required")
 
         # pdb.set_trace()
 
@@ -240,6 +239,11 @@ def main():
         result['msg'] = IDGUtils.COMPLETED_MESSAGE
         result['changed'] = False
         result['status'] = status_results
+
+    except (NameError, UnboundLocalError) as e:
+        # Very early error
+        module_except = AnsibleModule(argument_spec={})
+        module_except.fail_json(msg=to_native(e))
 
     except Exception as e:
         # Uncontrolled exception

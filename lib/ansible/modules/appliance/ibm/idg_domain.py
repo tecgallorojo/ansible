@@ -261,63 +261,62 @@ except ImportError:
 
 def main():
 
-    # Define the available arguments/parameters that a user can pass to the module
-    # File permission to the local: directory
-    filemap_spec = {
-        'display': dict(type='bool'),  # File content can be displayed for the local: directory.
-        'exec': dict(type='bool'),  # Files in the local: directory can be run as scripts.
-        'copyfrom': dict(type='bool'),  # Files can be copied FROM the local: directory.
-        'copyto': dict(type='bool'),  # Files can be copied TO the local: directory.
-        'delete': dict(type='bool'),  # Files can be DELETED from the local: directory.
-        'subdir': dict(type='bool')  # Subdirectories can be created in the local: directory.
-    }
-
-    # Which types of events to generate when files are added to or deleted from the local: directory.
-    monitoringmap_spec = {
-        'audit': dict(type='bool'),  # Generate audit events.
-        'log': dict(type='bool')  # Generate log events.
-    }
-
-    # Quiesce configuration
-    quiescemap_spec = {
-        'delay': dict(type='int', default=0),  # Specifies the interval of time in seconds to wait before initiating the quiesce action.
-        'timeout': dict(type='int', default=60)  # Specifies the length of time in seconds to wait for all transactions to complete.
-    }
-
-    module_args = dict(
-        name=dict(type='str', required=True),  # Domain name
-        user_summary=dict(type='str', required=False),  # Domain description
-        admin_state=dict(type='str', choices=['enabled', 'disabled'], default='enabled'),  # Domain's administrative state
-        state=dict(type='str', choices=['present', 'absent', 'restarted', 'quiesced', 'unquiesced'], default='present'),  # Domain's operational state
-        quiesce_conf=dict(type='dict', options=quiescemap_spec, default=dict({'delay': 0, 'timeout': 60})),  # Transitions the operational state to down
-        idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True),  # IDG connection
-        file_map=dict(type='dict', options=filemap_spec, default=dict({'display': True, 'exec': True, 'copyfrom': True,
-                                                                       'copyto': True, 'delete': True, 'subdir': True})),  # File permission
-        monitoring_map=dict(type='dict', options=monitoringmap_spec, default=dict({'audit': False,
-                                                                                   'log': False})),  # Events  when work whith files
-        max_chkpoints=dict(type='int', default=3),  # The maximum number of configuration checkpoints to support.
-        visible=dict(type='list', default=['default']),  # Which application domains have visible to this domain
-        # TODO !!!
-        # It is better to guarantee immutability while waiting.
-        config_mode=dict(type='str', default='local'),
-        config_permissions_mode=dict(type='str', default='scope-domain'),
-        import_format=dict(type='str', default='ZIP'),
-        local_ip_rewrite=dict(type='bool', default=True)
-    )
-
-    # AnsibleModule instantiation
-    module = AnsibleModule(
-        argument_spec=module_args,
-        supports_check_mode=True,
-        # Interaction between parameters
-        required_if=[['state', 'quiesced', ['quiesce_conf']]]
-    )
-
-    # Validates the dependence of the utility module
-    if not HAS_IDG_DEPS:
-        module.fail_json(msg=IDGUtils.ERROR_IMPORT_MODULE)
-
     try:
+        # Define the available arguments/parameters that a user can pass to the module
+        # File permission to the local: directory
+        filemap_spec = {
+            'display': dict(type='bool'),  # File content can be displayed for the local: directory.
+            'exec': dict(type='bool'),  # Files in the local: directory can be run as scripts.
+            'copyfrom': dict(type='bool'),  # Files can be copied FROM the local: directory.
+            'copyto': dict(type='bool'),  # Files can be copied TO the local: directory.
+            'delete': dict(type='bool'),  # Files can be DELETED from the local: directory.
+            'subdir': dict(type='bool')  # Subdirectories can be created in the local: directory.
+        }
+
+        # Which types of events to generate when files are added to or deleted from the local: directory.
+        monitoringmap_spec = {
+            'audit': dict(type='bool'),  # Generate audit events.
+            'log': dict(type='bool')  # Generate log events.
+        }
+
+        # Quiesce configuration
+        quiescemap_spec = {
+            'delay': dict(type='int', default=0),  # Specifies the interval of time in seconds to wait before initiating the quiesce action.
+            'timeout': dict(type='int', default=60)  # Specifies the length of time in seconds to wait for all transactions to complete.
+        }
+
+        module_args = dict(
+            name=dict(type='str', required=True),  # Domain name
+            user_summary=dict(type='str', required=False),  # Domain description
+            admin_state=dict(type='str', choices=['enabled', 'disabled'], default='enabled'),  # Domain's administrative state
+            state=dict(type='str', choices=['present', 'absent', 'restarted', 'quiesced', 'unquiesced'], default='present'),  # Domain's operational state
+            quiesce_conf=dict(type='dict', options=quiescemap_spec, default=dict({'delay': 0, 'timeout': 60})),  # Transitions the operational state to down
+            idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True),  # IDG connection
+            file_map=dict(type='dict', options=filemap_spec, default=dict({'display': True, 'exec': True, 'copyfrom': True,
+                                                                           'copyto': True, 'delete': True, 'subdir': True})),  # File permission
+            monitoring_map=dict(type='dict', options=monitoringmap_spec, default=dict({'audit': False,
+                                                                                       'log': False})),  # Events  when work whith files
+            max_chkpoints=dict(type='int', default=3),  # The maximum number of configuration checkpoints to support.
+            visible=dict(type='list', default=['default']),  # Which application domains have visible to this domain
+            # TODO !!!
+            # It is better to guarantee immutability while waiting.
+            config_mode=dict(type='str', default='local'),
+            config_permissions_mode=dict(type='str', default='scope-domain'),
+            import_format=dict(type='str', default='ZIP'),
+            local_ip_rewrite=dict(type='bool', default=True)
+        )
+
+        # AnsibleModule instantiation
+        module = AnsibleModule(
+            argument_spec=module_args,
+            supports_check_mode=True,
+            # Interaction between parameters
+            required_if=[['state', 'quiesced', ['quiesce_conf']]]
+        )
+
+        # Validates the dependence of the utility module
+        if not HAS_IDG_DEPS:
+            module.fail_json(msg="The IDG utils modules is required")
 
         # Parse arguments to dict
         idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
@@ -638,6 +637,11 @@ def main():
 
         else:  # Can't read domain's lists
             module.fail_json(msg=IDGApi.ERROR_GET_DOMAIN_LIST)
+
+    except (NameError, UnboundLocalError) as e:
+        # Very early error
+        module_except = AnsibleModule(argument_spec={})
+        module_except.fail_json(msg=to_native(e))
 
     except Exception as e:
         # Uncontrolled exception

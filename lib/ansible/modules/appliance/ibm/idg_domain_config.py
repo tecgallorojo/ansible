@@ -228,39 +228,38 @@ def get_status_summary(list_dict):
 
 def main():
 
-    # Arguments/parameters that a user can pass to the module
-    module_args = dict(
-        state=dict(type='str', choices=['exported', 'imported', 'reseted', 'saved'], default='saved'),  # Domain's operational state
-        idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True),  # IDG connection
-        name=dict(type='str', required=True),  # Domain to work
-        # for Export
-        user_summary=dict(type='str'),  # Backup comment
-        all_files=dict(type='bool', default=False),  # Include all files in the local: directory for the domain
-        persisted=dict(type='bool', default=False),  # Export from persisted or running configuration
-        internal_files=dict(type='bool', default=True),  # Export internal configuration file
-        # for Import
-        input_file=dict(type='str', required=False, no_log=True),  # The base64-encoded BLOB to import
-        overwrite_files=dict(type='bool', default=False),  # Overwrite files that exist
-        overwrite_objects=dict(type='bool', default=False),  # Overwrite objects that exist
-        dry_run=dict(type='bool', default=False),  # Import package (on) or validate the import operation without importing (off).
-        rewrite_local_ip=dict(type='bool', default=False)  # The local address binding to their equivalent interfaces in appliance
-        # TODO !!!
-        # DeploymentPolicy
-    )
-
-    # AnsibleModule instantiation
-    module = AnsibleModule(
-        argument_spec=module_args,
-        supports_check_mode=True,
-        # Interaction between parameters
-        required_if=[['state', 'imported', ['input_file']]]
-    )
-
-    # Validates the dependence of the utility module
-    if not HAS_IDG_DEPS:
-        module.fail_json(msg=IDGUtils.ERROR_IMPORT_MODULE)
-
     try:
+        # Arguments/parameters that a user can pass to the module
+        module_args = dict(
+            state=dict(type='str', choices=['exported', 'imported', 'reseted', 'saved'], default='saved'),  # Domain's operational state
+            idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True),  # IDG connection
+            name=dict(type='str', required=True),  # Domain to work
+            # for Export
+            user_summary=dict(type='str'),  # Backup comment
+            all_files=dict(type='bool', default=False),  # Include all files in the local: directory for the domain
+            persisted=dict(type='bool', default=False),  # Export from persisted or running configuration
+            internal_files=dict(type='bool', default=True),  # Export internal configuration file
+            # for Import
+            input_file=dict(type='str', required=False, no_log=True),  # The base64-encoded BLOB to import
+            overwrite_files=dict(type='bool', default=False),  # Overwrite files that exist
+            overwrite_objects=dict(type='bool', default=False),  # Overwrite objects that exist
+            dry_run=dict(type='bool', default=False),  # Import package (on) or validate the import operation without importing (off).
+            rewrite_local_ip=dict(type='bool', default=False)  # The local address binding to their equivalent interfaces in appliance
+            # TODO !!!
+            # DeploymentPolicy
+        )
+
+        # AnsibleModule instantiation
+        module = AnsibleModule(
+            argument_spec=module_args,
+            supports_check_mode=True,
+            # Interaction between parameters
+            required_if=[['state', 'imported', ['input_file']]]
+        )
+
+        # Validates the dependence of the utility module
+        if not HAS_IDG_DEPS:
+            module.fail_json(msg="The IDG utils modules is required")
 
         # Parse arguments to dict
         idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
@@ -574,6 +573,11 @@ def main():
 
         else:  # Can't read domain's lists
             module.fail_json(msg=IDGApi.ERROR_GET_DOMAIN_LIST)
+
+    except (NameError, UnboundLocalError) as e:
+        # Very early error
+        module_except = AnsibleModule(argument_spec={})
+        module_except.fail_json(msg=to_native(e))
 
     except Exception as e:
         # Uncontrolled exception

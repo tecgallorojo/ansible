@@ -36,7 +36,6 @@ options:
   checksum:
     description:
       - SHA1 checksum of the file being transferred. Used to validate that the copy of the file was successful.
-    default: False
 
   src:
     description:
@@ -47,6 +46,13 @@ options:
     description:
       - Remote absolute path where the file should be copied to. If src is a directory, this must be a directory too.
     required: True
+
+  recursive:
+    description:
+      - Indicates that you want to recursively download the contents of a directory.
+      - Only applies to the local:/ directory.
+    default: False
+    type: bool
 
 extends_documentation_fragment: idg
 
@@ -142,40 +148,42 @@ except ImportError:
 
 def main():
 
-    module_args = dict(
-        backup=dict(type='bool', required=False, default=False),  # Create a backup file
-        checksum=dict(type='str', required=False),  # SHA1 checksum of the source
-        domain=dict(type='str', required=True),  # Domain name
-        src=dict(type='str', required=True),  # Local path to a file or directory
-        dest=dict(type='str', required=True),  # Remote absolute path
-        idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
-    )
-
-    # AnsibleModule instantiation
-    module = AnsibleModule(
-        argument_spec=module_args,
-        supports_check_mode=True
-    )
-
-    # Validates the dependence of the utility module
-    if not HAS_IDG_DEPS:
-        module.fail_json(msg=IDGUtils.ERROR_IMPORT_MODULE)
-
     try:
+
+        module_args = dict(
+            backup=dict(type='bool', required=False, default=False),  # Create a backup file
+            checksum=dict(type='str', required=False),  # SHA1 checksum of the source
+            domain=dict(type='str', required=True),  # Domain name
+            src=dict(type='str', required=True),  # Local path to a file or directory
+            dest=dict(type='str', required=True),  # Remote absolute path
+            recursive=dict(type='bool', required=False, default=False),  # Download recursively
+            idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
+        )
+
+        # AnsibleModule instantiation
+        module = AnsibleModule(
+            argument_spec=module_args,
+            supports_check_mode=True
+        )
+
+        # Validates the dependence of the utility module
+        if not HAS_IDG_DEPS:
+            module.fail_json(msg="The IDG utils modules is required")
 
         # Parse arguments to dict
         idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
         domain_name = module.params['domain']
         backup = module.params['backup']
+        recursive = module.params['recursive']
+
         changed = False
 
         tmp_dir=''  # Directory for processing on the control host
 
         src = module.params['src']
         _src_parse = urlparse(src)
-        _src_ldir = _src_parse.scheme  # Local directory
         _src_rpath = _src_parse.path  # Relative path
-        _src_path_list = [d for d in _src_rpath.split('/') if d.strip() != '']
+        _src_path_list = [d for d in _src_rpath.split(os.sep) if d.strip() != '']
 
         dest = module.params['dest']
         _dest_parse = urlparse(dest)
@@ -201,7 +209,8 @@ def main():
                           force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
         create_file_msg = {"file": {"name": "", "content": ""}}
-        export_action_msg = {"Export": {"Format":"ZIP", "AllFiles":"on", "Persisted":"off", "IncludeInternalFiles":"off", "Object": []}}
+        move_file_msg = {"MoveFile": {"sURL": "", "dURL": "", "Overwrite": ""}}
+        create_dir_msg = {"directory": {"name": ""}}
 
         #
         # Here the action begins
@@ -209,86 +218,122 @@ def main():
 
         pdb.set_trace()
 
-        if _src_ldir + ':' in IDGUtils.IDG_DIRS:  # The copy is between remote targets
+        remote_home_path = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), _dest_ldir] + _dest_path_list)
+        remote_home_dppath = '/'.join([_dest_ldir+':'] + _dest_path_list)
 
-            t_src = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), _src_ldir] + _src_path_list)  # Path prefix
-            ck_code, ck_msg, ck_data = idg_mgmt.api_call(t_src, method='GET')
+        if os.path.isdir(src):  # The source is a directory
+            if recursive:
 
-            if ck_code == 200 and ck_msg == 'OK':
+                for home, subdirs, files in os.walk(src): # Loop over directory
 
-                if 'filestore' in ck_data.keys():  # Is directory
+                    state = 'Upload directory'
+                    remote_home_path = '/'.join([remote_home_path, home.split(os.sep)[-1]])  # Path prefix
+                    remote_home_dppath = '/'.join([remote_home_dppath, home.split(os.sep)[-1]])
 
-                    tmp_dir = tempfile.mkdtemp()  # create temp directory
+                    create_dir_msg['directory']['name'] = home.split(os.sep)[-1]
+                    cd_code, cd_msg, cd_data = idg_mgmt.api_call(remote_home_path, method='PUT', data=json.dumps(create_dir_msg))
 
-                    try:
+                    if (cd_code != 201 and cd_msg != 'Created') and (cd_code != 409 and cd_msg != 'Conflict'):
+                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(cd_data['error'])))
 
-                        exp_code, exp_msg, exp_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
-                                                                        data=json.dumps(export_action_msg))
+                    state = 'Upload file'
+                    for file_name in files:   # files in home
+                        local_file_path = os.path.join(home, file_name)
+                        with open(local_file_path, "rb") as f:
+                            encoded_file = base64.b64encode(f.read())
 
-                        if exp_code == 202 and exp_msg == 'Accepted':
-                            # Asynchronous actions export accepted. Wait for complete
-                            state = "download"
-                            action_result = idg_mgmt.wait_for_action_end(IDGApi.URI_ACTION.format(domain_name), href=exp_data['_links']['location']['href'],
-                                                                         state=state)
+                        trp = '/'.join([remote_home_path, file_name])  # Path prefix
+                        remote_file = '/'.join([remote_home_dppath, file_name])
 
-                            # Export completed. Get result
-                            doex_code, doex_msg, doex_data = idg_mgmt.api_call(exp_data['_links']['location']['href'], method='GET')
+                        if backup:  # check backup
 
-                            if doex_code == 200 and doex_msg == 'OK':
-                                # Export ok
-                                try:
-                                    backup_file = os.sep.join([tmp_dir, domain_name + ".zip"])
-                                    with open(backup_file, 'wb') as f:
-                                        f.write(base64.b64decode(doex_data['result']['file']))
+                            ck_code, ck_msg, ck_data = idg_mgmt.api_call(trp, method='GET')
 
-                                    ziparch = ZipFile(backup_file)
-                                    ziparch.extractall(tmp_dir)
+                            if ck_code == 200 and ck_msg == 'OK':
+                                move_file_msg['MoveFile']['sURL'] = remote_file
+                                move_file_msg['MoveFile']['dURL'] = remote_file + ".bak"
+                                move_file_msg['MoveFile']['Overwrite'] = "on"
+                                state = 'Backup file'
 
-                                except Exception as e:
-                                    module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
+                                mv_code, mv_msg, mv_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(move_file_msg))
 
-                            else:
-                                # Can't retrieve the export
-                                module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
+                                if mv_code != 200 and mv_msg != 'OK':
+                                    module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(mv_data['error'])))
 
-                        elif exp_code == 200 and exp_msg == 'OK':
-                            # Successfully processed synchronized action
-                            result['msg'] = idg_mgmt.status_text(exp_data['Export'])
-                            result['changed'] = True
+                        create_file_msg['file']['name'] = file_name
+                        create_file_msg['file']['content'] = encoded_file.decode("utf-8")
 
-                        else:
-                            # Export not accepted
-                            module.fail_json(msg=IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name))
+                        cf_code, cf_msg, cf_data = idg_mgmt.api_call(trp, method='PUT', data=json.dumps(create_file_msg))
 
-                    finally:
-                        pass
-                        # Clean
-                        shutil.rmtree(tmp_dir)
+                        if cf_code != 201 and cf_msg != 'Created':
+                            module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(cf_data['error'])))
 
-                else:  # Is file
+                result_msg = IDGUtils.COMPLETED_MESSAGE
+            else:  # Not recursive
+                for home, _, files in os.walk(src): # Loop over directory
 
-            elif ck_code == 404 and ck_msg == 'Not Found':
-                # Source not found
-                module.fail_json(msg="Source {0} does not exist.".format(src))
-            else:
-                # Other Errors
-                pass
-        elif isdir(src):  # The source is a local directory
-            pass
-            # Loop over directory
-            # check backup
-            # upload files and directories recursively
-        elif isfile(src):  # The source is a local file
+                    state = 'Upload directory'
+                    remote_home_path = '/'.join([remote_home_path, home.split(os.sep)[-1]])  # Path prefix
+                    remote_home_dppath = '/'.join([remote_home_dppath, home.split(os.sep)[-1]])
+
+                    create_dir_msg['directory']['name'] = src.split(os.sep)[-1]
+                    cd_code, cd_msg, cd_data = idg_mgmt.api_call(remote_home_path, method='PUT', data=json.dumps(create_dir_msg))
+
+                    if (cd_code != 201 and cd_msg != 'Created') and (cd_code != 409 and cd_msg != 'Conflict'):
+                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(cd_data['error'])))
+
+                    state = 'Upload file'
+                    for file_name in files:   # files in home
+                        local_file_path = os.path.join(home, file_name)
+                        with open(local_file_path, "rb") as f:
+                            encoded_file = base64.b64encode(f.read())
+
+                        trp = '/'.join([remote_home_path, file_name])  # Path prefix
+                        remote_file = '/'.join([remote_home_dppath, file_name])
+
+                        if backup:  # check backup
+
+                            ck_code, ck_msg, ck_data = idg_mgmt.api_call(trp, method='GET')
+
+                            if ck_code == 200 and ck_msg == 'OK':
+                                move_file_msg['MoveFile']['sURL'] = remote_file
+                                move_file_msg['MoveFile']['dURL'] = remote_file + ".bak"
+                                move_file_msg['MoveFile']['Overwrite'] = "on"
+                                state = 'Backup file'
+
+                                mv_code, mv_msg, mv_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(move_file_msg))
+
+                                if mv_code != 200 and mv_msg != 'OK':
+                                    module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(mv_data['error'])))
+
+                        create_file_msg['file']['name'] = file_name
+                        create_file_msg['file']['content'] = encoded_file.decode("utf-8")
+
+                        cf_code, cf_msg, cf_data = idg_mgmt.api_call(trp, method='PUT', data=json.dumps(create_file_msg))
+
+                        if cf_code != 201 and cf_msg != 'Created':
+                            module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(cf_data['error'])))
+
+                    break  # Prevent continue touring directories
+
+                result_msg = IDGUtils.COMPLETED_MESSAGE
+
+        elif os.path.isfile(src):  # The source is a local file
             pass
             # Get the file
             # check backup
             # copy the file
         else:
-            module.fail_json(msg="Source {0} is not supported.".format(src))
+            module.fail_json(msg='Source "{0}" is not supported.'.format(src))
 
         # Finish
         result['msg'] = result_msg
         result['changed'] = changed
+
+    except (NameError, UnboundLocalError) as e:
+        # Very early error
+        module_except = AnsibleModule(argument_spec={})
+        module_except.fail_json(msg=to_native(e))
 
     except Exception as e:
         # Uncontrolled exception

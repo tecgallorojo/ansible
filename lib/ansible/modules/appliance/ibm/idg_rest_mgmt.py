@@ -136,24 +136,23 @@ except ImportError:
 
 def main():
 
-    module_args = dict(
-        method=dict(type='str', required=False, default='GET', choices=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']),  # HTTP methods
-        uri=dict(type='str', required=True),  # URI of the request
-        payload=dict(type='raw', required=False),  # Payload
-        idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
-    )
-
-    # AnsibleModule instantiation
-    module = AnsibleModule(
-        argument_spec=module_args,
-        supports_check_mode=True
-    )
-
-    # Validates the dependence of the utility module
-    if not HAS_IDG_DEPS:
-        module.fail_json(msg=IDGUtils.ERROR_IMPORT_MODULE)
-
     try:
+        module_args = dict(
+            method=dict(type='str', required=False, default='GET', choices=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']),  # HTTP methods
+            uri=dict(type='str', required=True),  # URI of the request
+            payload=dict(type='raw', required=False),  # Payload
+            idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
+        )
+
+        # AnsibleModule instantiation
+        module = AnsibleModule(
+            argument_spec=module_args,
+            supports_check_mode=True
+        )
+
+        # Validates the dependence of the utility module
+        if not HAS_IDG_DEPS:
+            module.fail_json(msg="The IDG utils modules is required")
 
         # Parse arguments to dict
         idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
@@ -188,6 +187,11 @@ def main():
         result['msg'] = IDGUtils.COMPLETED_MESSAGE
         result['changed'] = True
         result['failed'] = True if result['http_code'] >= 400 else False
+
+    except (NameError, UnboundLocalError) as e:
+        # Very early error
+        module_except = AnsibleModule(argument_spec={})
+        module_except.fail_json(msg=to_native(e))
 
     except Exception as e:
         # Uncontrolled exception

@@ -43,11 +43,10 @@ class IDGUtils(object):
     # Constants
     #############################
 
-    IMMUTABLE_MESSAGE = 'The current state is consistent with the desired configuration'
-    COMPLETED_MESSAGE = 'Completed'
-    CHECK_MODE_MESSAGE = 'Change was only simulated, due to enabling verification mode'
-    UNCONTROLLED_EXCEPTION = 'Unknown exception'
-    ERROR_IMPORT_MODULE = 'The IDG utils modules is required'
+    IMMUTABLE_MESSAGE = 'The current state is consistent with the desired configuration.'
+    COMPLETED_MESSAGE = 'Completed.'
+    CHECK_MODE_MESSAGE = 'Change was only simulated, due to enabling verification mode.'
+    UNCONTROLLED_EXCEPTION = 'Unknown exception.'
 
     # Connection agreements
     BASIC_HEADERS = {"Content-Type": "application/json"}
