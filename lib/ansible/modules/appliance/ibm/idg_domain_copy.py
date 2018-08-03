@@ -36,6 +36,7 @@ options:
   checksum:
     description:
       - SHA1 checksum of the file being transferred. Used to validate that the copy of the file was successful.
+      - This functionality has not yet been implemented.
 
   src:
     description:
@@ -112,10 +113,11 @@ checksum:
 backup_file:
   description:
     - Name of backup file created
-  returned: success
+    - It is only returned when a single file is copied
+  returned: when success and I(backup=True)
   type: string
   sample:
-    - local:///xsls/transform.xsl_20180715T1425
+    - local:///xsls/transform.xsl-20180715T1425
 
 '''
 
@@ -126,11 +128,9 @@ __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 import json
 import os
-import os.path
-import shutil
-import tempfile
 import base64
-from zipfile import ZipFile, BadZipfile
+from zipfile import ZipFile
+import datetime
 import pdb
 
 from ansible.module_utils.basic import AnsibleModule
@@ -146,13 +146,46 @@ except ImportError:
     HAS_IDG_DEPS = False
 
 
+def create_directory(module, idg_mgmt, home_path, domain_name):
+    create_dir_msg = {"directory": {"name": home_path.split('/')[-1]}}
+    cd_code, cd_msg, cd_data = idg_mgmt.api_call(home_path, method='PUT', data=json.dumps(create_dir_msg))
+
+    if (cd_code != 201 and cd_msg != 'Created') and (cd_code != 409 and cd_msg != 'Conflict'):
+        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, "Upload directory", domain_name) + str(ErrorHandler(cd_data['error'])))
+
+
+def do_backup(module, idg_mgmt, uri_file, remote_file, domain_name):
+    ck_code, ck_msg, ck_data = idg_mgmt.api_call(uri_file, method='GET')
+    if ck_code == 200 and ck_msg == 'OK':  # File exists
+
+        now = datetime.datetime.now()
+        move_file_msg = {"MoveFile": {"sURL": remote_file, "dURL": remote_file + "-" + now.strftime("%Y%m%dT%H%M%S"), "Overwrite": "on"}}
+
+        mv_code, mv_msg, mv_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(move_file_msg))
+
+        if mv_code != 200 and mv_msg != 'OK':
+            module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, "Creating backup", domain_name) + str(ErrorHandler(mv_data['error'])))
+
+
+def upload_file(module, idg_mgmt, local_file_path, uri_file, domain_name):
+
+    with open(local_file_path, "rb") as f:
+        encoded_file = base64.b64encode(f.read())
+
+    create_file_msg = {"file": {"name": uri_file.split('/')[-1], "content": encoded_file.decode("utf-8")}}
+
+    cf_code, cf_msg, cf_data = idg_mgmt.api_call(uri_file, method='PUT', data=json.dumps(create_file_msg))
+    if cf_code != 201 and cf_msg != 'Created':
+        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, "Upload file", domain_name) + str(ErrorHandler(cf_data['error'])))
+
+
 def main():
 
     try:
 
         module_args = dict(
             backup=dict(type='bool', required=False, default=False),  # Create a backup file
-            checksum=dict(type='str', required=False),  # SHA1 checksum of the source
+            checksum=dict(type='str', required=False),  # SHA1 checksum of the source. NOT IMPLEMENTED
             domain=dict(type='str', required=True),  # Domain name
             src=dict(type='str', required=True),  # Local path to a file or directory
             dest=dict(type='str', required=True),  # Remote absolute path
@@ -181,20 +214,13 @@ def main():
         tmp_dir=''  # Directory for processing on the control host
 
         src = module.params['src']
-        _src_parse = urlparse(src)
-        _src_rpath = _src_parse.path  # Relative path
-        _src_path_list = [d for d in _src_rpath.split(os.sep) if d.strip() != '']
 
         dest = module.params['dest']
         _dest_parse = urlparse(dest)
         _dest_ldir = _dest_parse.scheme  # Local directory
         if _dest_ldir + ':' not in IDGUtils.IDG_DIRS:
             module.fail_json(msg="Base directory of the destination file {0} does not correspond to what is specified for datapower.".format(dest))
-        _dest_rpath = _dest_parse.path  # Relative path
-        _dest_path_list = [d for d in _dest_rpath.split('/') if d.strip() != '']
-
-        # Customize the result
-        del result['name']
+        _dest_path_list = [d for d in _dest_parse.path.split('/') if d.strip() != '']
 
         # Init IDG API connect
         idg_mgmt = IDGApi(ansible_module=module,
@@ -208,10 +234,6 @@ def main():
                           password=idg_data_spec['password'],
                           force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
-        create_file_msg = {"file": {"name": "", "content": ""}}
-        move_file_msg = {"MoveFile": {"sURL": "", "dURL": "", "Overwrite": ""}}
-        create_dir_msg = {"directory": {"name": ""}}
-
         #
         # Here the action begins
         #
@@ -219,114 +241,68 @@ def main():
         pdb.set_trace()
 
         remote_home_path = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), _dest_ldir] + _dest_path_list)
-        remote_home_dppath = '/'.join([_dest_ldir+':'] + _dest_path_list)
+        idg_path = '/'.join([_dest_ldir + ':'] + _dest_path_list)
 
         if os.path.isdir(src):  # The source is a directory
             if recursive:
-
                 for home, subdirs, files in os.walk(src): # Loop over directory
 
-                    state = 'Upload directory'
-                    remote_home_path = '/'.join([remote_home_path, home.split(os.sep)[-1]])  # Path prefix
-                    remote_home_dppath = '/'.join([remote_home_dppath, home.split(os.sep)[-1]])
+                    home_dir = home.strip('/').split(os.sep)[-1 * ((len(home.strip('/').split(os.sep))-len(src.strip('/').split(os.sep)))+1):]
+                    remote_home_path_uri = '/'.join([remote_home_path] + home_dir)  # Path prefix
+                    idg_path = '/'.join([idg_path] + home_dir)
 
-                    create_dir_msg['directory']['name'] = home.split(os.sep)[-1]
-                    cd_code, cd_msg, cd_data = idg_mgmt.api_call(remote_home_path, method='PUT', data=json.dumps(create_dir_msg))
+                    create_directory(module, idg_mgmt, remote_home_path_uri, domain_name)
 
-                    if (cd_code != 201 and cd_msg != 'Created') and (cd_code != 409 and cd_msg != 'Conflict'):
-                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(cd_data['error'])))
-
-                    state = 'Upload file'
                     for file_name in files:   # files in home
+
+                        uri_file = '/'.join([remote_home_path_uri, file_name])  # Path prefix
+                        remote_file = '/'.join([idg_path, file_name])
+
+                        if backup:  # Backup required
+                            do_backup(module, idg_mgmt, uri_file, remote_file, domain_name)
+
                         local_file_path = os.path.join(home, file_name)
-                        with open(local_file_path, "rb") as f:
-                            encoded_file = base64.b64encode(f.read())
-
-                        trp = '/'.join([remote_home_path, file_name])  # Path prefix
-                        remote_file = '/'.join([remote_home_dppath, file_name])
-
-                        if backup:  # check backup
-
-                            ck_code, ck_msg, ck_data = idg_mgmt.api_call(trp, method='GET')
-
-                            if ck_code == 200 and ck_msg == 'OK':
-                                move_file_msg['MoveFile']['sURL'] = remote_file
-                                move_file_msg['MoveFile']['dURL'] = remote_file + ".bak"
-                                move_file_msg['MoveFile']['Overwrite'] = "on"
-                                state = 'Backup file'
-
-                                mv_code, mv_msg, mv_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(move_file_msg))
-
-                                if mv_code != 200 and mv_msg != 'OK':
-                                    module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(mv_data['error'])))
-
-                        create_file_msg['file']['name'] = file_name
-                        create_file_msg['file']['content'] = encoded_file.decode("utf-8")
-
-                        cf_code, cf_msg, cf_data = idg_mgmt.api_call(trp, method='PUT', data=json.dumps(create_file_msg))
-
-                        if cf_code != 201 and cf_msg != 'Created':
-                            module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(cf_data['error'])))
+                        upload_file(module, idg_mgmt, local_file_path, uri_file, domain_name)
 
                 result_msg = IDGUtils.COMPLETED_MESSAGE
             else:  # Not recursive
                 for home, _, files in os.walk(src): # Loop over directory
 
-                    state = 'Upload directory'
-                    remote_home_path = '/'.join([remote_home_path, home.split(os.sep)[-1]])  # Path prefix
-                    remote_home_dppath = '/'.join([remote_home_dppath, home.split(os.sep)[-1]])
+                    home_dir = home.split(os.sep)[-1]
+                    remote_home_path = '/'.join([remote_home_path, home_dir])  # Path prefix
+                    idg_path = '/'.join([idg_path, home_dir])
 
-                    create_dir_msg['directory']['name'] = src.split(os.sep)[-1]
-                    cd_code, cd_msg, cd_data = idg_mgmt.api_call(remote_home_path, method='PUT', data=json.dumps(create_dir_msg))
+                    create_directory(module, idg_mgmt, remote_home_path, domain_name)
 
-                    if (cd_code != 201 and cd_msg != 'Created') and (cd_code != 409 and cd_msg != 'Conflict'):
-                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(cd_data['error'])))
-
-                    state = 'Upload file'
                     for file_name in files:   # files in home
-                        local_file_path = os.path.join(home, file_name)
-                        with open(local_file_path, "rb") as f:
-                            encoded_file = base64.b64encode(f.read())
 
-                        trp = '/'.join([remote_home_path, file_name])  # Path prefix
-                        remote_file = '/'.join([remote_home_dppath, file_name])
+                        uri_file = '/'.join([remote_home_path, file_name])  # Path prefix
+                        remote_file = '/'.join([idg_path, file_name])
 
                         if backup:  # check backup
+                            do_backup(module, idg_mgmt, uri_file, remote_file, domain_name)
 
-                            ck_code, ck_msg, ck_data = idg_mgmt.api_call(trp, method='GET')
-
-                            if ck_code == 200 and ck_msg == 'OK':
-                                move_file_msg['MoveFile']['sURL'] = remote_file
-                                move_file_msg['MoveFile']['dURL'] = remote_file + ".bak"
-                                move_file_msg['MoveFile']['Overwrite'] = "on"
-                                state = 'Backup file'
-
-                                mv_code, mv_msg, mv_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(move_file_msg))
-
-                                if mv_code != 200 and mv_msg != 'OK':
-                                    module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(mv_data['error'])))
-
-                        create_file_msg['file']['name'] = file_name
-                        create_file_msg['file']['content'] = encoded_file.decode("utf-8")
-
-                        cf_code, cf_msg, cf_data = idg_mgmt.api_call(trp, method='PUT', data=json.dumps(create_file_msg))
-
-                        if cf_code != 201 and cf_msg != 'Created':
-                            module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(cf_data['error'])))
+                        local_file_path = os.path.join(home, file_name)
+                        upload_file(module, idg_mgmt, local_file_path, uri_file, domain_name)
 
                     break  # Prevent continue touring directories
 
                 result_msg = IDGUtils.COMPLETED_MESSAGE
 
         elif os.path.isfile(src):  # The source is a local file
-            pass
-            # Get the file
-            # check backup
-            # copy the file
+            if backup:  # check backup
+                do_backup(module, idg_mgmt, remote_home_path, idg_path, domain_name)
+
+            upload_file(module, idg_mgmt, src, remote_home_path, domain_name)
+
+            result_msg = IDGUtils.COMPLETED_MESSAGE
+
         else:
             module.fail_json(msg='Source "{0}" is not supported.'.format(src))
 
         # Finish
+        # Customize the result
+        del result['name']
         result['msg'] = result_msg
         result['changed'] = changed
 
@@ -337,11 +313,9 @@ def main():
 
     except Exception as e:
         # Uncontrolled exception
-        # shutil.rmtree(tmp_dir)
         module.fail_json(msg=(IDGUtils.UNCONTROLLED_EXCEPTION + '. {0}').format(to_native(e)))
     else:
         # That's all folks!
-        # shutil.rmtree(tmp_dir)
         module.exit_json(**result)
 
 
