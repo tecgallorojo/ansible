@@ -138,6 +138,12 @@ class IDGApi(object):
         self.validate_certs = kwargs['validate_certs']
 
     @staticmethod
+    def apifilestore_uri2path(uri):
+        # Converts the URI defined for handling the filestore in the corresponding path in DP
+        elist = [e for e in uri.split('/') if e.strip() != ''][3:]
+        return ('/'.join([elist[0]+':'] + elist[1:]))
+
+    @staticmethod
     def get_operation_status(operations, location):
         # If have only one operation
         if isinstance(operations, dict):

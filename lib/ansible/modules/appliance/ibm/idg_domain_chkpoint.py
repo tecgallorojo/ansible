@@ -111,12 +111,8 @@ msg:
     - Unknown error for (https://idg-host1:5554/mgmt/domains/config/). <open_url error timed out>
 '''
 
-# Version control
-__MODULE_NAME = "idg_domain_chkpoint"
-__MODULE_VERSION = "1.0"
-__MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
-
 import json
+import yaml
 import pdb
 
 from ansible.module_utils.basic import AnsibleModule
@@ -129,6 +125,11 @@ try:
     HAS_IDG_DEPS = True
 except ImportError:
     HAS_IDG_DEPS = False
+
+# Version control
+__MODULE_NAME = yaml.load(DOCUMENTATION)['module']
+__MODULE_VERSION = "1.0"
+__MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 
 def main():

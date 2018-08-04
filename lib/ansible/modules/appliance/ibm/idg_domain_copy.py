@@ -121,16 +121,12 @@ backup_file:
 
 '''
 
-# Version control
-__MODULE_NAME = "idg_domain_copy"
-__MODULE_VERSION = "1.0"
-__MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
-
 import json
 import os
 import base64
 from zipfile import ZipFile
 import datetime
+import yaml
 import pdb
 
 from ansible.module_utils.basic import AnsibleModule
@@ -144,6 +140,11 @@ try:
     HAS_IDG_DEPS = True
 except ImportError:
     HAS_IDG_DEPS = False
+
+# Version control
+__MODULE_NAME = yaml.load(DOCUMENTATION)['module']
+__MODULE_VERSION = "1.0"
+__MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 
 def create_directory(module, idg_mgmt, home_path, domain_name):
@@ -244,19 +245,23 @@ def main():
         idg_path = '/'.join([_dest_ldir + ':'] + _dest_path_list)
 
         if os.path.isdir(src):  # The source is a directory
+
+            # If the user is working in only check mode we do not want to make any changes
+            IDGUtils.implement_check_mode(module, result)
+
             if recursive:
                 for home, subdirs, files in os.walk(src): # Loop over directory
 
                     home_dir = home.strip('/').split(os.sep)[-1 * ((len(home.strip('/').split(os.sep))-len(src.strip('/').split(os.sep)))+1):]
-                    remote_home_path_uri = '/'.join([remote_home_path] + home_dir)  # Path prefix
-                    idg_path = '/'.join([idg_path] + home_dir)
+                    remote_home_path_uri = '/'.join([remote_home_path] + home_dir)  # Update root path
+                    idg_path = '/'.join([idg_path] + home_dir)  # Update path inside IDG
 
                     create_directory(module, idg_mgmt, remote_home_path_uri, domain_name)
 
-                    for file_name in files:   # files in home
+                    for file_name in files:  # files in home
 
-                        uri_file = '/'.join([remote_home_path_uri, file_name])  # Path prefix
-                        remote_file = '/'.join([idg_path, file_name])
+                        uri_file = '/'.join([remote_home_path_uri, file_name])  # Update URI for file
+                        remote_file = '/'.join([idg_path, file_name])  # Update path inside IDG
 
                         if backup:  # Backup required
                             do_backup(module, idg_mgmt, uri_file, remote_file, domain_name)
@@ -265,19 +270,21 @@ def main():
                         upload_file(module, idg_mgmt, local_file_path, uri_file, domain_name)
 
                 result_msg = IDGUtils.COMPLETED_MESSAGE
+
             else:  # Not recursive
+
                 for home, _, files in os.walk(src): # Loop over directory
 
                     home_dir = home.split(os.sep)[-1]
-                    remote_home_path = '/'.join([remote_home_path, home_dir])  # Path prefix
-                    idg_path = '/'.join([idg_path, home_dir])
+                    remote_home_path = '/'.join([remote_home_path, home_dir])  # Update root path
+                    idg_path = '/'.join([idg_path, home_dir])  # Update path inside IDG
 
                     create_directory(module, idg_mgmt, remote_home_path, domain_name)
 
-                    for file_name in files:   # files in home
+                    for file_name in files:  # files in home
 
-                        uri_file = '/'.join([remote_home_path, file_name])  # Path prefix
-                        remote_file = '/'.join([idg_path, file_name])
+                        uri_file = '/'.join([remote_home_path, file_name])  # Update URI for file
+                        remote_file = '/'.join([idg_path, file_name])  # Path inside IDG
 
                         if backup:  # check backup
                             do_backup(module, idg_mgmt, uri_file, remote_file, domain_name)
@@ -290,12 +297,41 @@ def main():
                 result_msg = IDGUtils.COMPLETED_MESSAGE
 
         elif os.path.isfile(src):  # The source is a local file
-            if backup:  # check backup
-                do_backup(module, idg_mgmt, remote_home_path, idg_path, domain_name)
 
-            upload_file(module, idg_mgmt, src, remote_home_path, domain_name)
+            ck_code, ck_msg, ck_data = idg_mgmt.api_call(remote_home_path, method='GET')
 
-            result_msg = IDGUtils.COMPLETED_MESSAGE
+            if (ck_code == 200 and ck_msg == 'OK') or (ck_code == 404 and ck_msg == 'Not Found'):
+                if 'filestore' in ck_data.keys():  # Is directory
+
+                    # If the user is working in only check mode we do not want to make any changes
+                    IDGUtils.implement_check_mode(module, result)
+
+                    file_name = src.split(os.sep)[-1]
+                    uri_file = '/'.join([remote_home_path, file_name])  # Update URI for file
+                    remote_file = '/'.join([idg_path, file_name])  # Path inside IDG
+
+                    if backup:  # check backup
+                        do_backup(module, idg_mgmt, uri_file, remote_file, domain_name)
+
+                    upload_file(module, idg_mgmt, src, uri_file, domain_name)
+
+                    result_msg = IDGUtils.COMPLETED_MESSAGE
+
+                else:
+
+                    # If the user is working in only check mode we do not want to make any changes
+                    IDGUtils.implement_check_mode(module, result)
+
+                    if backup:  # check backup
+                        do_backup(module, idg_mgmt, remote_home_path, idg_path, domain_name)
+
+                    upload_file(module, idg_mgmt, src, remote_home_path, domain_name)
+
+                    result_msg = IDGUtils.COMPLETED_MESSAGE
+
+            else:
+                # Other Errors
+                module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(ck_data['error'])))
 
         else:
             module.fail_json(msg='Source "{0}" is not supported.'.format(src))
@@ -303,6 +339,7 @@ def main():
         # Finish
         # Customize the result
         del result['name']
+
         result['msg'] = result_msg
         result['changed'] = changed
 

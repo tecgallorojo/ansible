@@ -95,17 +95,13 @@ directory:
 
 '''
 
-# Version control
-__MODULE_NAME = "idg_domain_fetch"
-__MODULE_VERSION = "1.0"
-__MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
-
 import json
 import tempfile
 import os
 import shutil
 import base64
 from zipfile import ZipFile, ZIP_DEFLATED
+import yaml
 import pdb
 
 from ansible.module_utils.basic import AnsibleModule
@@ -119,6 +115,11 @@ try:
     HAS_IDG_DEPS = True
 except ImportError:
     HAS_IDG_DEPS = False
+
+# Version control
+__MODULE_NAME = yaml.load(DOCUMENTATION)['module']
+__MODULE_VERSION = "1.0"
+__MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 
 def main():
@@ -181,6 +182,9 @@ def main():
 
                     if recursive:  # recursively download the entire directory
 
+                        # If the user is working in only check mode we do not want to make any changes
+                        IDGUtils.implement_check_mode(module, result)
+
                         tmp_dir = tempfile.mkdtemp()  # create temp directory
 
                         try:
@@ -240,6 +244,10 @@ def main():
                             shutil.rmtree(tmp_dir)
 
                     else:  # Only files in the designated directory
+
+                        # If the user is working in only check mode we do not want to make any changes
+                        IDGUtils.implement_check_mode(module, result)
+
                         if 'file' in ck_data['filestore']['location'].keys():
 
                             files_names = [i for i in AbstractListDict(ck_data['filestore']['location']['file']).values(key='name')]
@@ -269,6 +277,9 @@ def main():
                 module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(ck_data['error'])))
 
         # Finish
+        # Customize the result
+        del result['name']
+
         result['msg'] = IDGApi.COMPLETED
 
     except (NameError, UnboundLocalError) as e:

@@ -28,17 +28,29 @@ options:
 
   path:
     description:
-      - Path to the file or directory being managed
+      - Path to file or directory.
+      - When the I(state=move) refers to the target
     required: True
+
+  source:
+    description:
+      - When the I(state=move) indicates the source file or directory
+    required: True
+
+  overwrite:
+    description:
+      - When the I(state=move) indicates that you want to overwrite the destination
+    required: False
+    type: bool
+    default: False
 
   state:
     description:
-      - If C(directory), all intermediate subdirectories will be created if they do not exist. If file, the file will B(not) be created if it does not exist.
-      - If C(absent), directories will be recursively delete.
-      - If C(show), shows information about the destination if it is a directory list its content.
-      - If C(move), When you want to move an entire directory do not add the / character at the end.
-        This state requires the I(source) and I(overwrite) parameters.
-      - The C(overwrite) parameter does not apply when working with directories.
+      - C(directory) all intermediate subdirectories will be created if they do not exist. If file, the file will B(not) be created if it does not exist.
+      - C(absent) remove files or directories. Directories will be recursively delete.
+      - C(show) shows information about the destination if it is a directory list its content.
+      - C(move) move (rename) files or directories. This state requires the I(source) and I(overwrite) parameters.
+      - C(overwrite) indicates that you want to overwrite the destination. Not apply when working with directories.
     required: False
     default: directory
     choices:
@@ -123,12 +135,8 @@ output:
       }
 '''
 
-# Version control
-__MODULE_NAME = "idg_domain_file"
-__MODULE_VERSION = "1.0"
-__MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
-
 import json
+import yaml
 import pdb
 
 from ansible.module_utils.basic import AnsibleModule
@@ -142,6 +150,11 @@ try:
     HAS_IDG_DEPS = True
 except ImportError:
     HAS_IDG_DEPS = False
+
+# Version control
+__MODULE_NAME = yaml.load(DOCUMENTATION)['module']
+__MODULE_VERSION = "1.0"
+__MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 
 def main():
@@ -172,10 +185,6 @@ def main():
         path = module.params['path']
         state = module.params['state']
         domain_name = module.params['domain']
-        changed = False
-
-        # Customize the result
-        del result['name']
 
         # Init IDG API connect
         idg_mgmt = IDGApi(ansible_module=module,
@@ -188,9 +197,6 @@ def main():
                           user=idg_data_spec['user'],
                           password=idg_data_spec['password'],
                           force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
-
-        create_dir_msg = {"directory": {"name": ""}}
-        move_file_msg = {"MoveFile": {"sURL": "", "dURL": "", "Overwrite": ""}}
 
         #
         # Here the action begins
@@ -205,8 +211,6 @@ def main():
         path_as_list = [d for d in rpath.split('/') if d.strip() != '']
         td = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), ldir])  # Path prefix
 
-        result_msg = ''
-
         if state == 'directory':
             # Create directory recursively
             for d in path_as_list:
@@ -216,25 +220,26 @@ def main():
                 if ck_code == 200 and ck_msg == 'OK':
 
                     td = '/'.join([td, d])
+                    result['path'] = idg_mgmt.apifilestore_uri2path(td)
 
                     if 'directory' in ck_data['filestore']['location'].keys():
-                        filestore_abst = AbstractListDict(ck_data['filestore']['location']['directory'])  # Search between directories
+                        filestore_abst = AbstractListDict(ck_data['filestore']['location']['directory'])  # Get directories
                     else:
                         filestore_abst = AbstractListDict({})  # Not contain directories
 
-                    if td in filestore_abst.values(key='href'):  # if directory exist
-                        result_msg = IDGUtils.IMMUTABLE_MESSAGE
-                    else:  # Not exist, create it
+                    if ('href' in filestore_abst.keys()) and (td in filestore_abst.values(key='href')):  # if directory exist
+                        result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
+                    else:  # Not exist, create it
                         # If the user is working in only check mode we do not want to make any changes
                         IDGUtils.implement_check_mode(module, result)
 
-                        create_dir_msg['directory']['name'] = d
+                        create_dir_msg = {"directory": {"name": d}}
                         cr_code, cr_msg, cr_data = idg_mgmt.api_call(td, method='PUT', data=json.dumps(create_dir_msg))
 
                         if cr_code == 201 and cr_msg == 'Created':
-                            result_msg = cr_data['result']
-                            changed = True
+                            result['msg'] = cr_data['result']
+                            result['changed'] = True
                         else:
                             module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(cr_data['error'])))
 
@@ -242,21 +247,22 @@ def main():
                     module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(ck_data['error'])))
 
         elif state == 'move':  # Move remote files
-            move_file_msg['MoveFile']['sURL'] = module.params['source']
-            move_file_msg['MoveFile']['Overwrite'] = IDGUtils.str_on_off(module.params['overwrite'])
-            move_file_msg['MoveFile']['dURL'] = path
+
+            move_file_msg = {"MoveFile": {"sURL": module.params['source'].strip('/'), "dURL": path.strip('/'),
+                             "Overwrite": IDGUtils.str_on_off(module.params['overwrite'])}}
+            result['path'] = move_file_msg['MoveFile']['dURL']
 
             mv_code, mv_msg, mv_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(move_file_msg))
 
             if mv_code == 200 and mv_msg == 'OK':
-                result_msg = mv_data['MoveFile']
-                changed = True
+                result['changed'] = True
             else:
                 module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(mv_data['error'])))
 
         elif state == 'show':  # Show details of file or content of directories
 
-            sh_code, sh_msg, sh_data = idg_mgmt.api_call('/'.join([td] + path_as_list), method='GET')
+            list_target = '/'.join([td] + path_as_list)
+            sh_code, sh_msg, sh_data = idg_mgmt.api_call(list_target, method='GET')
 
             if sh_code == 200 and sh_msg == 'OK':
                 output = {}
@@ -275,6 +281,8 @@ def main():
                     else:
                         module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(fi_data['error'])))
 
+                result['msg'] = IDGApi.COMPLETED
+                result['path'] = idg_mgmt.apifilestore_uri2path(list_target)
                 result['output'] = output
 
             else:
@@ -288,18 +296,21 @@ def main():
 
             td = '/'.join([td] + path_as_list)
             rm_code, rm_msg, rm_data = idg_mgmt.api_call(td, method='DELETE')
+            result['path'] = idg_mgmt.apifilestore_uri2path(td)
 
             if rm_code == 200 and rm_msg == 'OK':
-                result_msg = rm_data['result']
-                changed = True
+                result['msg'] = rm_data['result']
+                result['changed'] = True
+
             elif rm_code == 404 and rm_msg == 'Not Found':
-                result_msg = IDGUtils.IMMUTABLE_MESSAGE
+                result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
+
             else:
                 module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(rm_data['error'])))
 
         # Finish
-        result['msg'] = result_msg
-        result['changed'] = changed
+        # Customize the result
+        del result['name']
 
     except (NameError, UnboundLocalError) as e:
         # Very early error
@@ -311,6 +322,7 @@ def main():
         module.fail_json(msg=(IDGUtils.UNCONTROLLED_EXCEPTION + '. {0}').format(to_native(e)))
     else:
         # That's all folks!
+        pdb.set_trace()
         module.exit_json(**result)
 
 
