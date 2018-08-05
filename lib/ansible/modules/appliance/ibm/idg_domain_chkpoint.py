@@ -238,7 +238,7 @@ def main():
                                 tmp_result['changed'] = True
                         else:
                             # Can't retrieve the create checkpoint result
-                            module.fail_json(msg=to_native(IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
+                            module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                     elif create_code == 200 and create_msg == 'OK':
                         # Successfully processed synchronized action
@@ -247,7 +247,7 @@ def main():
 
                     else:
                         # Create checkpoint not accepted
-                        module.fail_json(msg=to_native(IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name)))
+                        module.fail_json(msg=IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name))
 
                 elif state == 'absent':
 
@@ -278,7 +278,7 @@ def main():
                                 tmp_result['changed'] = True
                         else:
                             # Can't retrieve the create checkpoint result
-                            module.fail_json(msg=to_native(IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
+                            module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                     elif rm_code == 200 and rm_msg == 'OK':
                         # Successfully processed synchronized action
@@ -295,7 +295,7 @@ def main():
 
                     else:
                         # Create checkpoint not accepted
-                        module.fail_json(msg=to_native(IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name)))
+                        module.fail_json(msg=IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name))
 
                 elif state == 'restored':
 
@@ -326,7 +326,7 @@ def main():
                                 tmp_result['changed'] = True
                         else:
                             # Can't retrieve the create checkpoint result
-                            module.fail_json(msg=to_native(IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
+                            module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                     elif bak_code == 200 and bak_msg == 'OK':
                         # Successfully processed synchronized action
@@ -335,7 +335,7 @@ def main():
 
                     else:
                         # Create checkpoint not accepted
-                        module.fail_json(msg=to_native(IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name)))
+                        module.fail_json(msg=IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name))
 
             else:  # Domain NOT EXIST.
                 # Can't work the configuration of non-existent domain
