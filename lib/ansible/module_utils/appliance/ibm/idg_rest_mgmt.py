@@ -121,7 +121,6 @@ class IDGApi(object):
     ERROR_ACCEPTING_ACTION = 'Accepting "{0}" over domain "{1}".'
     ERROR_REACH_STATE = 'Unable to reach state "{0}" in domain "{1}".'
     ERROR_NOT_DOMAIN = 'Domain not exist!.'
-    COMPLETED = 'Completed.'
 
     def __init__(self, **kwargs):
         # Initialize the common variables to all calls

@@ -113,7 +113,7 @@ msg:
 
 import json
 import yaml
-import pdb
+# import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -161,10 +161,6 @@ def main():
         domain_name = module.params['domain']
         chkpoint_name = module.params['name']
 
-        # Result
-        result.update({"domain": domain_name})  # Add domain to result
-        result['name'] = chkpoint_name
-
         # Init IDG API connect
         idg_mgmt = IDGApi(ansible_module=module,
                           idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
@@ -177,11 +173,7 @@ def main():
                           password=idg_data_spec['password'],
                           force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
-        # Variable to store the status of the action
-        action_result = ''
-
         # Action messages:
-
         # Save checkpoint
         save_act_msg = {"SaveCheckpoint": {"ChkName": chkpoint_name}}
 
@@ -194,6 +186,12 @@ def main():
         #
         # Here the action begins
         #
+
+        # Variable to store the status of the action
+        action_result = ''
+
+        # Intermediate values ​​for result
+        tmp_result={"name": chkpoint_name, "domain": domain_name, "msg": None, "changed": None, "failed": None}
 
         # List of configured domains
         chk_code, chk_msg, chk_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_LIST, method='GET')
@@ -229,23 +227,23 @@ def main():
 
                             if dcr_data['status'] == 'error':
                                 # pdb.set_trace()
-                                result['changed'] = False
+                                tmp_result['changed'] = False
                                 if ("Configuration Checkpoint '" + chkpoint_name + "' already exists.") in dcr_data['error']:
-                                    result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
+                                    tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
                                 else:
-                                    result['msg'] = IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(dcr_data['error']))
-                                    result['failed'] = True
+                                    tmp_result['msg'] = IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(dcr_data['error']))
+                                    tmp_result['failed'] = True
                             else:
-                                result['msg'] = dcr_data['status'].capitalize()
-                                result['changed'] = True
+                                tmp_result['msg'] = dcr_data['status'].capitalize()
+                                tmp_result['changed'] = True
                         else:
                             # Can't retrieve the create checkpoint result
                             module.fail_json(msg=to_native(IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
 
                     elif create_code == 200 and create_msg == 'OK':
                         # Successfully processed synchronized action
-                        result['msg'] = idg_mgmt.status_text(create_data['SaveCheckpoint'])
-                        result['changed'] = True
+                        tmp_result['msg'] = idg_mgmt.status_text(create_data['SaveCheckpoint'])
+                        tmp_result['changed'] = True
 
                     else:
                         # Create checkpoint not accepted
@@ -272,28 +270,28 @@ def main():
 
                             if drm_data['status'] == 'error':
                                 # pdb.set_trace()
-                                result['msg'] = IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(drm_data['error']))
-                                result['changed'] = False
-                                result['failed'] = True
+                                tmp_result['msg'] = IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(drm_data['error']))
+                                tmp_result['changed'] = False
+                                tmp_result['failed'] = True
                             else:
-                                result['msg'] = drm_data['status'].capitalize()
-                                result['changed'] = True
+                                tmp_result['msg'] = drm_data['status'].capitalize()
+                                tmp_result['changed'] = True
                         else:
                             # Can't retrieve the create checkpoint result
                             module.fail_json(msg=to_native(IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
 
                     elif rm_code == 200 and rm_msg == 'OK':
                         # Successfully processed synchronized action
-                        result['msg'] = idg_mgmt.status_text(rm_data['RemoveCheckpoint'])
-                        result['changed'] = True
+                        tmp_result['msg'] = idg_mgmt.status_text(rm_data['RemoveCheckpoint'])
+                        tmp_result['changed'] = True
 
                     elif rm_code == 400 and rm_msg == 'Bad Request':
                         # Wrong request, maybe there simply is no checkpoint
                         if ("Cannot find Configuration Checkpoint '" + chkpoint_name + "'.") in rm_data['error']:
-                            result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
+                            tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
                         else:
-                            result['msg'] = IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(rm_data['error']))
-                            result['failed'] = True
+                            tmp_result['msg'] = IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(rm_data['error']))
+                            tmp_result['failed'] = True
 
                     else:
                         # Create checkpoint not accepted
@@ -304,7 +302,7 @@ def main():
                     # If the user is working in only check mode we do not want to make any changes
                     IDGUtils.implement_check_mode(module, result)
 
-                    pdb.set_trace()
+                    # pdb.set_trace()
                     bak_code, bak_msg, bak_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
                                                                     data=json.dumps(rollback_act_msg))
 
@@ -320,20 +318,20 @@ def main():
 
                             if dbak_data['status'] == 'error':
                                 # pdb.set_trace()
-                                result['msg'] = IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(dbak_data['error']))
-                                result['changed'] = False
-                                result['failed'] = True
+                                tmp_result['msg'] = IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(dbak_data['error']))
+                                tmp_result['changed'] = False
+                                tmp_result['failed'] = True
                             else:
-                                result['msg'] = dbak_data['status'].capitalize()
-                                result['changed'] = True
+                                tmp_result['msg'] = dbak_data['status'].capitalize()
+                                tmp_result['changed'] = True
                         else:
                             # Can't retrieve the create checkpoint result
                             module.fail_json(msg=to_native(IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name)))
 
                     elif bak_code == 200 and bak_msg == 'OK':
                         # Successfully processed synchronized action
-                        result['msg'] = idg_mgmt.status_text(bak_data['RollbackCheckpoint'])
-                        result['changed'] = True
+                        tmp_result['msg'] = idg_mgmt.status_text(bak_data['RollbackCheckpoint'])
+                        tmp_result['changed'] = True
 
                     else:
                         # Create checkpoint not accepted
@@ -345,6 +343,14 @@ def main():
 
         else:  # Can't read domain's lists
             module.fail_json(msg=IDGApi.ERROR_GET_DOMAIN_LIST)
+
+        #
+        # Finish
+        #
+        # Update
+        for k, v in tmp_result.items():
+            if v != None:
+                result[k] = v
 
     except (NameError, UnboundLocalError) as e:
         # Very early error

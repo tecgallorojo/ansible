@@ -133,9 +133,6 @@ def main():
         else:
             module.fail_json(msg='If "parameters" is specified, a list is required')
 
-        # Customize the result
-        del result['name']
-
         result.update({"status": []})
 
         # Init IDG API connect
@@ -204,7 +201,6 @@ def main():
         #
         # Here the action begins
         #
-
         # pdb.set_trace()
 
         # Do request
@@ -237,6 +233,12 @@ def main():
             if pl:
                 status_results.append({s['param']: pl})
 
+        #
+        # Finish
+        #
+        # Customize the result
+        del result['name']
+        # Update
         result['msg'] = IDGUtils.COMPLETED_MESSAGE
         result['changed'] = False
         result['status'] = status_results

@@ -121,11 +121,6 @@ def main():
         domain_filter = module.params['filter']
         filter_flags = re.IGNORECASE if module.params['ignore_case'] else 0
 
-        # Customize the result
-        del result['name']
-
-        result.update({"domain_status": []})  # Add domain_status to result
-
         # Init IDG API connect
         idg_mgmt = IDGApi(ansible_module=module,
                           idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
@@ -141,8 +136,10 @@ def main():
         #
         # Here the action begins
         #
-
         # pdb.set_trace()
+
+        # Intermediate values ​​for result
+        tmp_result={"msg": IDGUtils.COMPLETED_MESSAGE, "domain_status": []}
 
         # List of configured domains and their status
         dstatus_code, dstatus_msg, dstatus_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_STATUS, method='GET')
@@ -183,13 +180,11 @@ def main():
                         else:
                             ds.update({"UserSummary": ""})
 
-                        result['domain_status'].append(ds)  # Add domain
+                        tmp_result['domain_status'].append(ds)  # Add domain
 
                     else:
                         # Can't read domain configuration
                         module.fail_json(msg="Unable to get configuration from domain {0}.".format(d['Domain']))
-
-                result['msg'] = IDGUtils.COMPLETED_MESSAGE
 
             else:
                 # Domain not exist
@@ -197,6 +192,16 @@ def main():
 
         else:  # Can't read domain's lists
             module.fail_json(msg=IDGApi.ERROR_GET_DOMAIN_LIST)
+
+        #
+        # Finish
+        #
+        # Customize
+        del result['name']
+        # Update
+        for k, v in tmp_result.items():
+            if v != None:
+                result[k] = v
 
     except (NameError, UnboundLocalError) as e:
         # Very early error

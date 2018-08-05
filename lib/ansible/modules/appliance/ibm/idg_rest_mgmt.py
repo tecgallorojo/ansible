@@ -159,9 +159,6 @@ def main():
         idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
         payload = json.dumps(module.params['payload']) if module.params['payload'] else None
 
-        # Customize the result
-        del result['name']
-
         result.update({"http_code": None, "http_phrase": None, "payload": None})
 
         # Init IDG API connect
@@ -179,12 +176,18 @@ def main():
         #
         # Here the action begins
         #
-
         # pdb.set_trace()
 
         # Do request
         result['http_code'], result['http_phrase'], result['payload'] = idg_mgmt.api_call(module.params['uri'], method=module.params['method'],
                                                                                           data=payload)
+
+        #
+        # Finish
+        #
+        # Customize the result
+        del result['name']
+        # Update
         result['msg'] = IDGUtils.COMPLETED_MESSAGE
         result['changed'] = True
         result['failed'] = True if result['http_code'] >= 400 else False

@@ -269,9 +269,6 @@ def main():
         state = module.params['state']
         domain_name = module.params['name']
 
-        # Result
-        result['name'] = domain_name
-
         # Init IDG API connect
         idg_mgmt = IDGApi(ansible_module=module,
                           idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
@@ -321,6 +318,9 @@ def main():
         # Here the action begins
         #
 
+        # Intermediate values ​​for result
+        tmp_result={"name": domain_name, "msg": None, "file": None, "changed": None, "failed": None}
+
         # List of configured domains
         chk_code, chk_msg, chk_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_LIST, method='GET')
 
@@ -354,17 +354,17 @@ def main():
 
                         if doex_code == 200 and doex_msg == 'OK':
                             # Export ok
-                            result['file'] = doex_data['result']['file']
-                            result['msg'] = action_result
-                            result['changed'] = True
+                            tmp_result['file'] = doex_data['result']['file']
+                            tmp_result['msg'] = action_result
+                            tmp_result['changed'] = True
                         else:
                             # Can't retrieve the export
                             module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                     elif exp_code == 200 and exp_msg == 'OK':
                         # Successfully processed synchronized action
-                        result['msg'] = idg_mgmt.status_text(exp_data['Export'])
-                        result['changed'] = True
+                        tmp_result['msg'] = idg_mgmt.status_text(exp_data['Export'])
+                        tmp_result['changed'] = True
 
                     else:
                         # Export not accepted
@@ -390,16 +390,16 @@ def main():
 
                         if dore_code == 200 and dore_msg == 'OK':
                             # Reseted successfully
-                            result['msg'] = dore_data['status'].capitalize()
-                            result['changed'] = True
+                            tmp_result['msg'] = dore_data['status'].capitalize()
+                            tmp_result['changed'] = True
                         else:
                             # Can't retrieve the reset result
                             module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                     elif reset_code == 200 and reset_msg == 'OK':
                         # Successfully processed synchronized action
-                        result['msg'] = idg_mgmt.status_text(reset_data['ResetThisDomain'])
-                        result['changed'] = True
+                        tmp_result['msg'] = idg_mgmt.status_text(reset_data['ResetThisDomain'])
+                        tmp_result['changed'] = True
 
                     else:
                         # Reseted not accepted
@@ -437,22 +437,22 @@ def main():
 
                                 if dosv_code == 200 and dosv_msg == 'OK':
                                     # Save completed
-                                    result['msg'] = action_result
-                                    result['changed'] = True
+                                    tmp_result['msg'] = action_result
+                                    tmp_result['changed'] = True
                                 else:
                                     # Can't retrieve the save result
                                     module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                             elif save_code == 200 and save_msg == 'OK':
                                 # Successfully processed synchronized action save
-                                result['msg'] = idg_mgmt.status_text(save_data['SaveConfig'])
-                                result['changed'] = True
+                                tmp_result['msg'] = idg_mgmt.status_text(save_data['SaveConfig'])
+                                tmp_result['changed'] = True
                             else:
                                 # Can't saved
                                 module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
                         else:
                             # Domain is save
-                            result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
+                            tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
                 elif state == 'imported':
 
@@ -478,14 +478,14 @@ def main():
                             if import_results['detected-errors'] != 'false':
                                 # Import failed
                                 # pdb.set_trace()
-                                result['msg'] = 'Import failed with error code: "' + import_results['detected-errors']['error'] + '"'
-                                result['changed'] = False
-                                result['failed'] = True
+                                tmp_result['msg'] = 'Import failed with error code: "' + import_results['detected-errors']['error'] + '"'
+                                tmp_result['changed'] = False
+                                tmp_result['failed'] = True
                             else:
                                 # Import success
-                                result.update({"results": []})  # Update to result
+                                tmp_result.update({"results": []})  # Update to result
 
-                                result['results'].append({"export-details": import_results['export-details']})
+                                tmp_result['results'].append({"export-details": import_results['export-details']})
 
                                 # EXEC-SCRIPT-RESULTS
                                 try:
@@ -493,26 +493,26 @@ def main():
                                     try:
                                         if isinstance(exec_script_results['cfg-result'], list):
 
-                                            result['results'].append({"exec-script-results":
+                                            tmp_result['results'].append({"exec-script-results":
                                                                      {"summary": {"total": len(exec_script_results['cfg-result']),
                                                                                   "status": get_status_summary(exec_script_results['cfg-result'])},
                                                                       "detail": exec_script_results['cfg-result']}})
                                         else:
-                                            result['results'].append({"exec-script-results": exec_script_results['cfg-result']})
+                                            tmp_result['results'].append({"exec-script-results": exec_script_results['cfg-result']})
 
                                     except Exception as e:
-                                        result['results'].append({"exec-script-results": exec_script_results})
+                                        tmp_result['results'].append({"exec-script-results": exec_script_results})
 
                                 except Exception as e:
                                     pass
 
                                 try:
-                                    result['results'].append({"file-copy-log": import_results['file-copy-log']['file-result']})
+                                    tmp_result['results'].append({"file-copy-log": import_results['file-copy-log']['file-result']})
                                 except Exception as e:
                                     pass
 
                                 try:
-                                    result['results'].append({"imported-debug": import_results['imported-debug']})
+                                    tmp_result['results'].append({"imported-debug": import_results['imported-debug']})
                                 except Exception as e:
                                     pass
 
@@ -522,14 +522,14 @@ def main():
                                     try:
                                         if isinstance(imported_files['file'], list):
 
-                                            result['results'].append({"imported-files": {"summary": {"total": len(imported_files['file']),
+                                            tmp_result['results'].append({"imported-files": {"summary": {"total": len(imported_files['file']),
                                                                                                      "status": get_status_summary(imported_files['file'])},
                                                                                          "detail": imported_files['file']}})
                                         else:
-                                            result['results'].append({"imported-files": imported_files['file']})
+                                            tmp_result['results'].append({"imported-files": imported_files['file']})
 
                                     except Exception as e:
-                                        result['results'].append({"imported-files": imported_files})
+                                        tmp_result['results'].append({"imported-files": imported_files})
 
                                 except Exception as e:
                                     pass
@@ -540,28 +540,28 @@ def main():
                                     try:
                                         if isinstance(imported_objects['object'], list):
 
-                                            result['results'].append({"imported-objects": {"summary": {"total": len(imported_objects['object']),
+                                            tmp_result['results'].append({"imported-objects": {"summary": {"total": len(imported_objects['object']),
                                                                                            "status": get_status_summary(imported_objects['object'])},
                                                                       "detail": imported_objects['object']}})
                                         else:
-                                            result['results'].append({"imported-objects": imported_objects['object']})
+                                            tmp_result['results'].append({"imported-objects": imported_objects['object']})
 
                                     except Exception as e:
-                                        result['results'].append({"imported-objects": imported_objects})
+                                        tmp_result['results'].append({"imported-objects": imported_objects})
 
                                 except Exception as e:
                                     pass
 
-                                result['msg'] = doim_data['status'].capitalize()
-                                result['changed'] = True
+                                tmp_result['msg'] = doim_data['status'].capitalize()
+                                tmp_result['changed'] = True
                         else:
                             # Can't retrieve the import result
                             module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                     elif imp_code == 200 and imp_msg == 'OK':
                         # Successfully processed synchronized action
-                        result['msg'] = idg_mgmt.status_text(imp_data['Import'])
-                        result['changed'] = True
+                        tmp_result['msg'] = idg_mgmt.status_text(imp_data['Import'])
+                        tmp_result['changed'] = True
 
                     else:
                         # Imported not accepted
@@ -574,6 +574,14 @@ def main():
 
         else:  # Can't read domain's lists
             module.fail_json(msg=IDGApi.ERROR_GET_DOMAIN_LIST)
+
+        #
+        # Finish
+        #
+        # Update
+        for k, v in tmp_result.items():
+            if v != None:
+                result[k] = v
 
     except (NameError, UnboundLocalError) as e:
         # Very early error

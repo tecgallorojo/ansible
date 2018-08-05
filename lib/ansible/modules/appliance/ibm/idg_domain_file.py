@@ -137,7 +137,7 @@ output:
 
 import json
 import yaml
-import pdb
+# import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -201,8 +201,10 @@ def main():
         #
         # Here the action begins
         #
+        # pdb.set_trace()
 
-        pdb.set_trace()
+        # Intermediate values ​​for result
+        tmp_result={"msg": None, "path": None, "changed": None, "output": None}
 
         # Do request
         parse = urlparse(path)
@@ -220,7 +222,7 @@ def main():
                 if ck_code == 200 and ck_msg == 'OK':
 
                     td = '/'.join([td, d])
-                    result['path'] = idg_mgmt.apifilestore_uri2path(td)
+                    tmp_result['path'] = idg_mgmt.apifilestore_uri2path(td)
 
                     if 'directory' in ck_data['filestore']['location'].keys():
                         filestore_abst = AbstractListDict(ck_data['filestore']['location']['directory'])  # Get directories
@@ -228,7 +230,7 @@ def main():
                         filestore_abst = AbstractListDict({})  # Not contain directories
 
                     if ('href' in filestore_abst.keys()) and (td in filestore_abst.values(key='href')):  # if directory exist
-                        result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
+                        tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
                     else:  # Not exist, create it
                         # If the user is working in only check mode we do not want to make any changes
@@ -238,8 +240,8 @@ def main():
                         cr_code, cr_msg, cr_data = idg_mgmt.api_call(td, method='PUT', data=json.dumps(create_dir_msg))
 
                         if cr_code == 201 and cr_msg == 'Created':
-                            result['msg'] = cr_data['result']
-                            result['changed'] = True
+                            tmp_result['msg'] = cr_data['result']
+                            tmp_result['changed'] = True
                         else:
                             module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(cr_data['error'])))
 
@@ -248,18 +250,24 @@ def main():
 
         elif state == 'move':  # Move remote files
 
+            # If the user is working in only check mode we do not want to make any changes
+            IDGUtils.implement_check_mode(module, result)
+
             move_file_msg = {"MoveFile": {"sURL": module.params['source'].strip('/'), "dURL": path.strip('/'),
                              "Overwrite": IDGUtils.str_on_off(module.params['overwrite'])}}
-            result['path'] = move_file_msg['MoveFile']['dURL']
+            tmp_result['path'] = move_file_msg['MoveFile']['dURL']
 
             mv_code, mv_msg, mv_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(move_file_msg))
 
             if mv_code == 200 and mv_msg == 'OK':
-                result['changed'] = True
+                tmp_result['changed'] = True
             else:
                 module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(mv_data['error'])))
 
         elif state == 'show':  # Show details of file or content of directories
+
+            # If the user is working in only check mode we do not want to make any changes
+            IDGUtils.implement_check_mode(module, result)
 
             list_target = '/'.join([td] + path_as_list)
             sh_code, sh_msg, sh_data = idg_mgmt.api_call(list_target, method='GET')
@@ -272,23 +280,25 @@ def main():
                         output['directory'] = [{"name": i["name"]} for i in AbstractListDict(sh_data['filestore']['location']['directory']).raw_data()]
 
                     if 'file' in sh_data['filestore']['location'].keys():
-                        output['file'] = [{"name": i["name"], "size": i["size"], "modified": i["modified"]} for i in AbstractListDict(sh_data['filestore']['location']['file']).raw_data()]
+                        output['file'] = [{"name": i["name"], "size": i["size"], "modified": i["modified"]}
+                                          for i in AbstractListDict(sh_data['filestore']['location']['file']).raw_data()]
                 else:
                     fi_code, fi_msg, fi_data = idg_mgmt.api_call('/'.join([td] + path_as_list[:-1]), method='GET')
 
                     if fi_code == 200 and fi_msg == 'OK':
-                        output = [{"name": i["name"], "size": i["size"], "modified": i["modified"]} for i in fi_data['filestore']['location']['file'] if i['name'] == path_as_list[-1]]
+                        output = [{"name": i["name"], "size": i["size"], "modified": i["modified"]}
+                                  for i in fi_data['filestore']['location']['file'] if i['name'] == path_as_list[-1]]
                     else:
                         module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(fi_data['error'])))
 
-                result['msg'] = IDGApi.COMPLETED
-                result['path'] = idg_mgmt.apifilestore_uri2path(list_target)
-                result['output'] = output
+                tmp_result['msg'] = IDGUtils.COMPLETED_MESSAGE
+                tmp_result['path'] = idg_mgmt.apifilestore_uri2path(list_target)
+                tmp_result['output'] = output
 
             else:
                 module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(sh_data['error'])))
 
-        else:  # state = 'absent'
+        else:  # Remove
             # Remove directory recursively
 
             # If the user is working in only check mode we do not want to make any changes
@@ -296,21 +306,27 @@ def main():
 
             td = '/'.join([td] + path_as_list)
             rm_code, rm_msg, rm_data = idg_mgmt.api_call(td, method='DELETE')
-            result['path'] = idg_mgmt.apifilestore_uri2path(td)
+            tmp_result['path'] = idg_mgmt.apifilestore_uri2path(td)
 
             if rm_code == 200 and rm_msg == 'OK':
-                result['msg'] = rm_data['result']
-                result['changed'] = True
+                tmp_result['msg'] = rm_data['result']
+                tmp_result['changed'] = True
 
             elif rm_code == 404 and rm_msg == 'Not Found':
-                result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
+                tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
             else:
                 module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(rm_data['error'])))
 
+        #
         # Finish
-        # Customize the result
+        #
+        # Customize
         del result['name']
+        # Update
+        for k, v in tmp_result.items():
+            if v != None:
+                result[k] = v
 
     except (NameError, UnboundLocalError) as e:
         # Very early error
@@ -322,7 +338,6 @@ def main():
         module.fail_json(msg=(IDGUtils.UNCONTROLLED_EXCEPTION + '. {0}').format(to_native(e)))
     else:
         # That's all folks!
-        pdb.set_trace()
         module.exit_json(**result)
 
 

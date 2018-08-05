@@ -15,7 +15,7 @@ DOCUMENTATION = '''
 ---
 
 module: idg_domain_fetch
-short_description: Copies files to remote IDGs
+short_description: Copies files from remote IDGs
 description:
   - The M(idg_domain_fetch) module download files from remote IDGs to the local box.
   - Use M(idg_domain_copy) to upload a file from local to a location on the remote IDG.
@@ -74,7 +74,7 @@ msg:
   returned: always
   type: string
   sample:
-    - File has been created.
+    - Completed.
 
 file:
   description:
@@ -102,7 +102,7 @@ import shutil
 import base64
 from zipfile import ZipFile, ZIP_DEFLATED
 import yaml
-import pdb
+# import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -171,6 +171,9 @@ def main():
         # Here the action begins
         #
 
+        # Intermediate values ​​for result
+        tmp_result={"msg": IDGUtils.COMPLETED_MESSAGE, "directory": None, "files": None}
+
         if _pldir + ':' in IDGUtils.IDG_DIRS:  # Base IDG directory is OK
 
             api_uri = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), _pldir] + _ppath_list)  # Path prefix
@@ -226,7 +229,7 @@ def main():
                                         with open(os.sep.join([local_target_home, local_target_zip]), "rb") as zf:
                                             encoded_file = base64.b64encode(zf.read())
 
-                                        result['directory'] = encoded_file
+                                        tmp_result['directory'] = encoded_file
 
                                     except Exception as e:
                                         module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name))
@@ -260,13 +263,17 @@ def main():
                                 else:
                                     module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(dw_data['error'])))
 
-                            result['files'] = files
+                            tmp_result['files'] = files
 
                         else:
-                            result['files'] = []
+                            tmp_result['files'] = []
 
                 else:  # Is file
-                    result['files'] = [{"name": _ppath_list[-1], "file": ck_data['file']}]
+
+                    # If the user is working in only check mode we do not want to make any changes
+                    IDGUtils.implement_check_mode(module, result)
+
+                    tmp_result['files'] = [{"name": _ppath_list[-1], "file": ck_data['file']}]
 
             elif ck_code == 404 and ck_msg == 'Not Found':
                 # Source not found
@@ -276,11 +283,15 @@ def main():
                 # Other Errors
                 module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(ck_data['error'])))
 
+        #
         # Finish
-        # Customize the result
+        #
+        # Customize
         del result['name']
-
-        result['msg'] = IDGApi.COMPLETED
+        # Update
+        for k, v in tmp_result.items():
+            if v != None:
+                result[k] = v
 
     except (NameError, UnboundLocalError) as e:
         # Very early error

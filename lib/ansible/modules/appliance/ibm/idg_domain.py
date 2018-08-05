@@ -339,9 +339,6 @@ def main():
         state = module.params['state']
         admin_state = module.params['admin_state']
 
-        # Result
-        result['name'] = domain_name
-
         # Init IDG API connect
         idg_mgmt = IDGApi(ansible_module=module,
                           idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
@@ -403,6 +400,9 @@ def main():
         #
         # pdb.set_trace()
 
+        # Intermediate values ​​for result
+        tmp_result={"msg": None, "name": domain_name, "changed": None}
+
         # List of configured domains
         chk_code, chk_msg, chk_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_LIST, method='GET')
 
@@ -428,11 +428,11 @@ def main():
                                                                                  data=json.dumps(domain_obj_msg))
 
                         if create_code == 201 and create_msg == 'Created':  # Created successfully
-                            result['msg'] = idg_mgmt.status_text(create_data[domain_name])
-                            result['changed'] = True
+                            tmp_result['msg'] = idg_mgmt.status_text(create_data[domain_name])
+                            tmp_result['changed'] = True
                         elif create_code == 200 and create_msg == 'OK':  # Updated successfully
-                            result['msg'] = idg_mgmt.status_text(create_data[domain_name])
-                            result['changed'] = True
+                            tmp_result['msg'] = idg_mgmt.status_text(create_data[domain_name])
+                            tmp_result['changed'] = True
                         else:
                             # Opps can't create
                             module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(state, domain_name))
@@ -472,15 +472,15 @@ def main():
                             # pdb.set_trace()
                             if upd_code == 200 and upd_msg == 'OK':
                                 # Updates successfully
-                                result['msg'] = idg_mgmt.status_text(upd_json[domain_name])
-                                result['changed'] = True
+                                tmp_result['msg'] = idg_mgmt.status_text(upd_json[domain_name])
+                                tmp_result['changed'] = True
                             else:
                                 # Opps can't update
                                 module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(upd_json['error'])))
 
                         elif state == 'present' and (domain_obj_msg['Domain'] == dc_data['Domain']):  # Identicals configurations
                             # The current configuration is identical to the new configuration, there is nothing to do
-                            result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
+                            tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
                         elif state == 'restarted':  # Restart domain
 
@@ -500,16 +500,16 @@ def main():
 
                                 if acs_code == 200 and acs_msg == 'OK':
                                     # Restarted successfully
-                                    result['msg'] = action_result
-                                    result['changed'] = True
+                                    tmp_result['msg'] = action_result
+                                    tmp_result['changed'] = True
                                 else:
                                     # Can't retrieve the restart result
                                     module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                             elif restart_code == 200 and restart_msg == 'OK':
                                 # Successfully processed synchronized action
-                                result['msg'] = idg_mgmt.status_text(restart_data['RestartThisDomain'])
-                                result['changed'] = True
+                                tmp_result['msg'] = idg_mgmt.status_text(restart_data['RestartThisDomain'])
+                                tmp_result['changed'] = True
 
                             else:
                                 # Can't restarted
@@ -548,23 +548,23 @@ def main():
 
                                             if acs_code == 200 and acs_msg == 'OK':
                                                 # Quiesced successfully
-                                                result['msg'] = action_result
-                                                result['changed'] = True
+                                                tmp_result['msg'] = action_result
+                                                tmp_result['changed'] = True
                                             else:
                                                 # Can't get the quiesced action result
                                                 module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                                         elif qd_code == 200 and qd_msg == 'OK':
                                             # Successfully processed synchronized action
-                                            result['msg'] = idg_mgmt.status_text(qd_data['DomainQuiesce'])
-                                            result['changed'] = True
+                                            tmp_result['msg'] = idg_mgmt.status_text(qd_data['DomainQuiesce'])
+                                            tmp_result['changed'] = True
 
                                         else:
                                             # Can't quiesced
                                             module.fail_json(msg=IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name))
                                     else:
                                         # Domain is quiesced
-                                        result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
+                                        tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
                                 elif state == 'unquiesced':
                                     if domain_quiesce_status == 'quiesced':
@@ -587,16 +587,16 @@ def main():
 
                                             if acs_code == 200 and acs_msg == 'OK':
                                                 # Unquiesce successfully
-                                                result['msg'] = action_result
-                                                result['changed'] = True
+                                                tmp_result['msg'] = action_result
+                                                tmp_result['changed'] = True
                                             else:
                                                 # Can't get unquiesce final result
                                                 module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
                                         elif uqd_code == 200 and uqd_msg == 'OK':
                                             # Successfully processed synchronized action
-                                            result['msg'] = idg_mgmt.status_text(uqd_data['DomainUnquiesce'])
-                                            result['changed'] = True
+                                            tmp_result['msg'] = idg_mgmt.status_text(uqd_data['DomainUnquiesce'])
+                                            tmp_result['changed'] = True
 
                                         else:
                                             # Can't accept unquiesce
@@ -604,7 +604,7 @@ def main():
 
                                     else:
                                         # Domain is unquiesced
-                                        result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
+                                        tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
                             else:
                                 # Can't get domain status
@@ -627,17 +627,25 @@ def main():
                     # pdb.set_trace()
                     if del_code == 200 and del_msg == 'OK':
                         # Remove successfully
-                        result['msg'] = idg_mgmt.status_text(del_data[domain_name])
-                        result['changed'] = True
+                        tmp_result['msg'] = idg_mgmt.status_text(del_data[domain_name])
+                        tmp_result['changed'] = True
                     else:
                         # Can't remove
                         module.fail_json(msg='Error deleting domain "{0}".'.format(domain_name))
 
                 else:  # Domain NOT EXIST.
-                    result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
+                    tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
         else:  # Can't read domain's lists
             module.fail_json(msg=IDGApi.ERROR_GET_DOMAIN_LIST)
+
+        #
+        # Finish
+        #
+        # Update
+        for k, v in tmp_result.items():
+            if v != None:
+                result[k] = v
 
     except (NameError, UnboundLocalError) as e:
         # Very early error
