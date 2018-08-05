@@ -240,7 +240,6 @@ msg:
 '''
 
 import json
-import yaml
 # import pdb
 
 from ansible.module_utils.basic import AnsibleModule
@@ -255,7 +254,7 @@ except ImportError:
     HAS_IDG_DEPS = False
 
 # Version control
-__MODULE_NAME = yaml.load(DOCUMENTATION)['module']
+__MODULE_NAME = "idg_domain"
 __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
