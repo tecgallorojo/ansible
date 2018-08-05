@@ -400,7 +400,7 @@ def main():
         # pdb.set_trace()
 
         # Intermediate values ​​for result
-        tmp_result={"msg": None, "name": domain_name, "changed": None}
+        tmp_result = {"msg": None, "name": domain_name, "changed": None}
 
         # List of configured domains
         chk_code, chk_msg, chk_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_LIST, method='GET')
@@ -643,7 +643,7 @@ def main():
         #
         # Update
         for k, v in tmp_result.items():
-            if v != None:
+            if v is not None:
                 result[k] = v
 
     except (NameError, UnboundLocalError) as e:

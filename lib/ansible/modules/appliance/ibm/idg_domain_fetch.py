@@ -290,7 +290,7 @@ def main():
         del result['name']
         # Update
         for k, v in tmp_result.items():
-            if v != None:
+            if v is not None:
                 result[k] = v
 
     except (NameError, UnboundLocalError) as e:
