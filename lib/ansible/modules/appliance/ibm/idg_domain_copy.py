@@ -113,7 +113,6 @@ import os
 import base64
 from zipfile import ZipFile
 import datetime
-import yaml
 # import pdb
 
 from ansible.module_utils.basic import AnsibleModule
@@ -121,15 +120,21 @@ from ansible.module_utils._text import to_native
 from ansible.module_utils.six.moves.urllib.parse import urlparse
 
 # Common package of our implementation for IDG
+HAS_IDG_DEPS = False
 try:
-    from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils, IDGException
-    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, AbstractListDict, ErrorHandler
+    from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils
+    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, ErrorHandler
     HAS_IDG_DEPS = True
 except ImportError:
-    HAS_IDG_DEPS = False
+    try:
+        from library.module_utils.idg_common import result, idg_endpoint_spec, IDGUtils
+        from library.module_utils.idg_rest_mgmt import IDGApi, ErrorHandler
+        HAS_IDG_DEPS = True
+    except ImportError:
+        pass
 
 # Version control
-__MODULE_NAME = yaml.load(DOCUMENTATION)['module']
+__MODULE_NAME = "idg_domain_copy"
 __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
@@ -171,9 +176,8 @@ def upload_file(module, idg_mgmt, local_file_path, uri_file, domain_name):
 
 
 def main():
-
-    try:
-
+    # Validates the dependence of the utility module
+    if HAS_IDG_DEPS:
         module_args = dict(
             backup=dict(type='bool', required=False, default=False),  # Create a backup file
             domain=dict(type='str', required=True),  # Domain name
@@ -188,48 +192,52 @@ def main():
             argument_spec=module_args,
             supports_check_mode=True
         )
+    else:
+        # Failure AnsibleModule instance
+        module = AnsibleModule(
+            argument_spec={},
+            check_invalid_arguments=False
+        )
+        module.fail_json(msg="The IDG utils modules is required")
 
-        # Validates the dependence of the utility module
-        if not HAS_IDG_DEPS:
-            module.fail_json(msg="The IDG utils modules is required")
+    # Parse arguments to dict
+    idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
+    domain_name = module.params['domain']
+    backup = module.params['backup']
+    recursive = module.params['recursive']
 
-        # Parse arguments to dict
-        idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
-        domain_name = module.params['domain']
-        backup = module.params['backup']
-        recursive = module.params['recursive']
+    tmp_dir = ''  # Directory for processing on the control host
 
-        tmp_dir=''  # Directory for processing on the control host
+    src = module.params['src']
 
-        src = module.params['src']
+    dest = module.params['dest']
+    _dest_parse = urlparse(dest)
+    _dest_ldir = _dest_parse.scheme  # Local directory
+    if _dest_ldir + ':' not in IDGUtils.IDG_DIRS:
+        module.fail_json(msg="Base directory of the destination file {0} does not correspond to what is specified for datapower.".format(dest))
+    _dest_path_list = [d for d in _dest_parse.path.split('/') if d.strip() != '']
 
-        dest = module.params['dest']
-        _dest_parse = urlparse(dest)
-        _dest_ldir = _dest_parse.scheme  # Local directory
-        if _dest_ldir + ':' not in IDGUtils.IDG_DIRS:
-            module.fail_json(msg="Base directory of the destination file {0} does not correspond to what is specified for datapower.".format(dest))
-        _dest_path_list = [d for d in _dest_parse.path.split('/') if d.strip() != '']
+    # Init IDG API connect
+    idg_mgmt = IDGApi(ansible_module=module,
+                      idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
+                      headers=IDGUtils.BASIC_HEADERS,
+                      http_agent=IDGUtils.HTTP_AGENT_SPEC,
+                      use_proxy=idg_data_spec['use_proxy'],
+                      timeout=idg_data_spec['timeout'],
+                      validate_certs=idg_data_spec['validate_certs'],
+                      user=idg_data_spec['user'],
+                      password=idg_data_spec['password'],
+                      force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
-        # Init IDG API connect
-        idg_mgmt = IDGApi(ansible_module=module,
-                          idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
-                          headers=IDGUtils.BASIC_HEADERS,
-                          http_agent=IDGUtils.HTTP_AGENT_SPEC,
-                          use_proxy=idg_data_spec['use_proxy'],
-                          timeout=idg_data_spec['timeout'],
-                          validate_certs=idg_data_spec['validate_certs'],
-                          user=idg_data_spec['user'],
-                          password=idg_data_spec['password'],
-                          force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
+    # Intermediate values ​​for result
+    tmp_result = {"msg": IDGUtils.COMPLETED_MESSAGE, "backup_file": None, "changed": True}
 
-        #
-        # Here the action begins
-        #
-        # pdb.set_trace()
+    #
+    # Here the action begins
+    #
+    # pdb.set_trace()
 
-        # Intermediate values ​​for result
-        tmp_result={"msg": IDGUtils.COMPLETED_MESSAGE, "backup_file": None, "changed": True}
-
+    try:
         remote_home_path = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), _dest_ldir] + _dest_path_list)
         idg_path = '/'.join([_dest_ldir + ':'] + _dest_path_list)
 
@@ -239,9 +247,9 @@ def main():
             IDGUtils.implement_check_mode(module, result)
 
             if recursive:
-                for home, subdirs, files in os.walk(src): # Loop over directory
+                for home, subdirs, files in os.walk(src):  # Loop over directory
 
-                    home_dir = home.strip('/').split(os.sep)[-1 * ((len(home.strip('/').split(os.sep))-len(src.strip('/').split(os.sep)))+1):]
+                    home_dir = home.strip('/').split(os.sep)[-1 * ((len(home.strip('/').split(os.sep)) - len(src.strip('/').split(os.sep))) + 1):]
                     remote_home_path_uri = '/'.join([remote_home_path] + home_dir)  # Update root path
                     idg_path_upd = '/'.join([idg_path] + home_dir)  # Update path inside IDG
 
@@ -253,13 +261,13 @@ def main():
                         remote_file = '/'.join([idg_path_upd, file_name])  # Update path inside IDG
 
                         if backup:  # Backup required
-                            _ = do_backup(module, idg_mgmt, uri_file, remote_file, domain_name)
+                            dummy = do_backup(module, idg_mgmt, uri_file, remote_file, domain_name)
 
                         local_file_path = os.path.join(home, file_name)
                         upload_file(module, idg_mgmt, local_file_path, uri_file, domain_name)
 
             else:  # Not recursive
-                for home, _, files in os.walk(src): # Loop over directory
+                for home, dummy, files in os.walk(src):  # Loop over directory
 
                     home_dir = home.split(os.sep)[-1]
                     remote_home_path = '/'.join([remote_home_path, home_dir])  # Update root path
@@ -273,7 +281,7 @@ def main():
                         remote_file = '/'.join([idg_path, file_name])  # Path inside IDG
 
                         if backup:  # check backup
-                            _ = do_backup(module, idg_mgmt, uri_file, remote_file, domain_name)
+                            dummy = do_backup(module, idg_mgmt, uri_file, remote_file, domain_name)
 
                         local_file_path = os.path.join(home, file_name)
                         upload_file(module, idg_mgmt, local_file_path, uri_file, domain_name)
@@ -323,11 +331,6 @@ def main():
         for k, v in tmp_result.items():
             if v is not None:
                 result[k] = v
-
-    except (NameError, UnboundLocalError) as e:
-        # Very early error
-        module_except = AnsibleModule(argument_spec={})
-        module_except.fail_json(msg=to_native(e))
 
     except Exception as e:
         # Uncontrolled exception

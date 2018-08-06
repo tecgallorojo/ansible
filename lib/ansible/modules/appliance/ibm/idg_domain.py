@@ -246,12 +246,18 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
 
 # Common package of our implementation for IDG
+HAS_IDG_DEPS = False
 try:
     from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils
     from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, ErrorHandler
     HAS_IDG_DEPS = True
 except ImportError:
-    HAS_IDG_DEPS = False
+    try:
+        from library.module_utils.idg_common import result, idg_endpoint_spec, IDGUtils
+        from library.module_utils.idg_rest_mgmt import IDGApi, ErrorHandler
+        HAS_IDG_DEPS = True
+    except ImportError:
+        pass
 
 # Version control
 __MODULE_NAME = "idg_domain"
@@ -260,31 +266,32 @@ __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 
 def main():
+    # pdb.set_trace()
+    # Define the available arguments/parameters that a user can pass to the module
+    # File permission to the local: directory
+    filemap_spec = {
+        'display': dict(type='bool'),  # File content can be displayed for the local: directory.
+        'exec': dict(type='bool'),  # Files in the local: directory can be run as scripts.
+        'copyfrom': dict(type='bool'),  # Files can be copied FROM the local: directory.
+        'copyto': dict(type='bool'),  # Files can be copied TO the local: directory.
+        'delete': dict(type='bool'),  # Files can be DELETED from the local: directory.
+        'subdir': dict(type='bool')  # Subdirectories can be created in the local: directory.
+    }
 
-    try:
-        # Define the available arguments/parameters that a user can pass to the module
-        # File permission to the local: directory
-        filemap_spec = {
-            'display': dict(type='bool'),  # File content can be displayed for the local: directory.
-            'exec': dict(type='bool'),  # Files in the local: directory can be run as scripts.
-            'copyfrom': dict(type='bool'),  # Files can be copied FROM the local: directory.
-            'copyto': dict(type='bool'),  # Files can be copied TO the local: directory.
-            'delete': dict(type='bool'),  # Files can be DELETED from the local: directory.
-            'subdir': dict(type='bool')  # Subdirectories can be created in the local: directory.
-        }
+    # Which types of events to generate when files are added to or deleted from the local: directory.
+    monitoringmap_spec = {
+        'audit': dict(type='bool'),  # Generate audit events.
+        'log': dict(type='bool')  # Generate log events.
+    }
 
-        # Which types of events to generate when files are added to or deleted from the local: directory.
-        monitoringmap_spec = {
-            'audit': dict(type='bool'),  # Generate audit events.
-            'log': dict(type='bool')  # Generate log events.
-        }
+    # Quiesce configuration
+    quiescemap_spec = {
+        'delay': dict(type='int', default=0),  # Specifies the interval of time in seconds to wait before initiating the quiesce action.
+        'timeout': dict(type='int', default=60)  # Specifies the length of time in seconds to wait for all transactions to complete.
+    }
 
-        # Quiesce configuration
-        quiescemap_spec = {
-            'delay': dict(type='int', default=0),  # Specifies the interval of time in seconds to wait before initiating the quiesce action.
-            'timeout': dict(type='int', default=60)  # Specifies the length of time in seconds to wait for all transactions to complete.
-        }
-
+    # Validates the dependence of the utility module
+    if HAS_IDG_DEPS:
         module_args = dict(
             name=dict(type='str', required=True),  # Domain name
             user_summary=dict(type='str', required=False),  # Domain description
@@ -314,94 +321,99 @@ def main():
             required_if=[['state', 'quiesced', ['quiesce_conf']]]
         )
 
-        # Validates the dependence of the utility module
-        if not HAS_IDG_DEPS:
-            module.fail_json(msg="The IDG utils modules is required")
+    else:
+        # Failure AnsibleModule instance
+        module = AnsibleModule(
+            argument_spec={},
+            check_invalid_arguments=False
+        )
+        module.fail_json(msg="The IDG utils modules is required")
 
-        # Parse arguments to dict
-        idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
-        filemap_data_spec = IDGUtils.parse_to_dict(module, module.params['file_map'], 'FileMap', IDGUtils.ANSIBLE_VERSION)
-        monitoringmap_data_spec = IDGUtils.parse_to_dict(module, module.params['monitoring_map'], 'MonitoringMap', IDGUtils.ANSIBLE_VERSION)
-        quiesce_conf_data_spec = IDGUtils.parse_to_dict(module, module.params['quiesce_conf'], 'QuiesceConf', IDGUtils.ANSIBLE_VERSION)
+    # Parse arguments to dict
+    idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
+    filemap_data_spec = IDGUtils.parse_to_dict(module, module.params['file_map'], 'FileMap', IDGUtils.ANSIBLE_VERSION)
+    monitoringmap_data_spec = IDGUtils.parse_to_dict(module, module.params['monitoring_map'], 'MonitoringMap', IDGUtils.ANSIBLE_VERSION)
+    quiesce_conf_data_spec = IDGUtils.parse_to_dict(module, module.params['quiesce_conf'], 'QuiesceConf', IDGUtils.ANSIBLE_VERSION)
 
-        if len(module.params['visible']) == 1:
-            visible_domain = {"value": module.params['visible'][0]}
-        else:
-            visible_domain = []
-            for d in module.params['visible']:
-                visible_domain.append({"value": d})
+    if len(module.params['visible']) == 1:
+        visible_domain = {"value": module.params['visible'][0]}
+    else:
+        visible_domain = []
+        for d in module.params['visible']:
+            visible_domain.append({"value": d})
 
-        # Domain to work
-        domain_name = module.params['name']
+    # Domain to work
+    domain_name = module.params['name']
 
-        # Status
-        state = module.params['state']
-        admin_state = module.params['admin_state']
+    # Status
+    state = module.params['state']
+    admin_state = module.params['admin_state']
 
-        # Init IDG API connect
-        idg_mgmt = IDGApi(ansible_module=module,
-                          idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
-                          headers=IDGUtils.BASIC_HEADERS,
-                          http_agent=IDGUtils.HTTP_AGENT_SPEC,
-                          use_proxy=idg_data_spec['use_proxy'],
-                          timeout=idg_data_spec['timeout'],
-                          validate_certs=idg_data_spec['validate_certs'],
-                          user=idg_data_spec['user'],
-                          password=idg_data_spec['password'],
-                          force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
+    # Init IDG API connect
+    idg_mgmt = IDGApi(ansible_module=module,
+                      idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
+                      headers=IDGUtils.BASIC_HEADERS,
+                      http_agent=IDGUtils.HTTP_AGENT_SPEC,
+                      use_proxy=idg_data_spec['use_proxy'],
+                      timeout=idg_data_spec['timeout'],
+                      validate_certs=idg_data_spec['validate_certs'],
+                      user=idg_data_spec['user'],
+                      password=idg_data_spec['password'],
+                      force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
-        # Variable to store the status of the action
-        action_result = ''
+    # Variable to store the status of the action
+    action_result = ''
 
-        # Configuration template for the domain
-        domain_obj_msg = {"Domain": {
-            "name": domain_name,
-            "mAdminState": admin_state,
-            "UserSummary": module.params['user_summary'],
-            "ConfigMode": module.params['config_mode'],
-            "ConfigPermissionsMode": module.params['config_permissions_mode'],
-            "ImportFormat": module.params['import_format'],
-            "LocalIPRewrite": IDGUtils.str_on_off(module.params['local_ip_rewrite']),
-            "MaxChkpoints": module.params['max_chkpoints'],
-            "FileMap": {
-                "Display": IDGUtils.str_on_off(filemap_data_spec['display']),
-                "Exec": IDGUtils.str_on_off(filemap_data_spec['exec']),
-                "CopyFrom": IDGUtils.str_on_off(filemap_data_spec['copyfrom']),
-                "CopyTo": IDGUtils.str_on_off(filemap_data_spec['copyto']),
-                "Delete": IDGUtils.str_on_off(filemap_data_spec['delete']),
-                "Subdir": IDGUtils.str_on_off(filemap_data_spec['subdir'])
-            },
-            "MonitoringMap": {
-                "Audit": IDGUtils.str_on_off(monitoringmap_data_spec['audit']),
-                "Log": IDGUtils.str_on_off(monitoringmap_data_spec['log'])
-            },
-            "NeighborDomain": visible_domain
-        }}
+    # Configuration template for the domain
+    domain_obj_msg = {"Domain": {
+        "name": domain_name,
+        "mAdminState": admin_state,
+        "UserSummary": module.params['user_summary'],
+        "ConfigMode": module.params['config_mode'],
+        "ConfigPermissionsMode": module.params['config_permissions_mode'],
+        "ImportFormat": module.params['import_format'],
+        "LocalIPRewrite": IDGUtils.str_on_off(module.params['local_ip_rewrite']),
+        "MaxChkpoints": module.params['max_chkpoints'],
+        "FileMap": {
+            "Display": IDGUtils.str_on_off(filemap_data_spec['display']),
+            "Exec": IDGUtils.str_on_off(filemap_data_spec['exec']),
+            "CopyFrom": IDGUtils.str_on_off(filemap_data_spec['copyfrom']),
+            "CopyTo": IDGUtils.str_on_off(filemap_data_spec['copyto']),
+            "Delete": IDGUtils.str_on_off(filemap_data_spec['delete']),
+            "Subdir": IDGUtils.str_on_off(filemap_data_spec['subdir'])
+        },
+        "MonitoringMap": {
+            "Audit": IDGUtils.str_on_off(monitoringmap_data_spec['audit']),
+            "Log": IDGUtils.str_on_off(monitoringmap_data_spec['log'])
+        },
+        "NeighborDomain": visible_domain
+    }}
 
-        # List of properties that are managed
-        domain_obj_items = [k for k, v in domain_obj_msg['Domain'].items()]
+    # List of properties that are managed
+    domain_obj_items = [k for k, v in domain_obj_msg['Domain'].items()]
 
-        # Action messages
-        # Restart
-        restart_act_msg = {"RestartThisDomain": {}}
+    # Action messages
+    # Restart
+    restart_act_msg = {"RestartThisDomain": {}}
 
-        # Quiesce
-        quiesce_act_msg = {"DomainQuiesce": {
-            "delay": quiesce_conf_data_spec['delay'], "name": domain_name,
-            "timeout": quiesce_conf_data_spec['timeout']
-        }}
+    # Quiesce
+    quiesce_act_msg = {"DomainQuiesce": {
+        "delay": quiesce_conf_data_spec['delay'], "name": domain_name,
+        "timeout": quiesce_conf_data_spec['timeout']
+    }}
 
-        # Unquiesce
-        unquiesce_act_msg = {"DomainUnquiesce": {"name": domain_name}}
+    # Unquiesce
+    unquiesce_act_msg = {"DomainUnquiesce": {"name": domain_name}}
 
-        #
-        # Here the action begins
-        #
-        # pdb.set_trace()
+    # Intermediate values ​​for result
+    tmp_result = {"msg": None, "name": domain_name, "changed": None}
 
-        # Intermediate values ​​for result
-        tmp_result = {"msg": None, "name": domain_name, "changed": None}
+    #
+    # Here the action begins
+    #
+    # pdb.set_trace()
 
+    try:
         # List of configured domains
         chk_code, chk_msg, chk_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_LIST, method='GET')
 
@@ -645,11 +657,6 @@ def main():
         for k, v in tmp_result.items():
             if v is not None:
                 result[k] = v
-
-    except (NameError, UnboundLocalError) as e:
-        # Very early error
-        module_except = AnsibleModule(argument_spec={})
-        module_except.fail_json(msg=to_native(e))
 
     except Exception as e:
         # Uncontrolled exception

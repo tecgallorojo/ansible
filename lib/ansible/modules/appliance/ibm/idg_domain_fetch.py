@@ -81,9 +81,10 @@ file:
     - Content of the file or files of the requested directory.
     - When I(recursive=false)
   returned: when success and not recursive
-  type: complex
-  sample: [{"name": "ErrorCodes.xml", "file": "PD94bWw...YW1lPgo"},
-           {"name": "Properties.xml", "file": "RlIGluZ...ZCAgY29u"}]
+  type: list
+  sample:
+    - {"name": "ErrorCodes.xml", "file": "PD94bWw...YW1lPgo"}
+    - {"name": "Properties.xml", "file": "RlIGluZ...ZCAgY29u"}
 
 directory:
   description:
@@ -101,7 +102,6 @@ import os
 import shutil
 import base64
 from zipfile import ZipFile, ZIP_DEFLATED
-import yaml
 # import pdb
 
 from ansible.module_utils.basic import AnsibleModule
@@ -109,22 +109,28 @@ from ansible.module_utils._text import to_native
 from ansible.module_utils.six.moves.urllib.parse import urlparse
 
 # Common package of our implementation for IDG
+HAS_IDG_DEPS = False
 try:
-    from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils, IDGException
-    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, AbstractListDict, ErrorHandler
+    from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils
+    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, ErrorHandler, AbstractListDict
     HAS_IDG_DEPS = True
 except ImportError:
-    HAS_IDG_DEPS = False
+    try:
+        from library.module_utils.idg_common import result, idg_endpoint_spec, IDGUtils
+        from library.module_utils.idg_rest_mgmt import IDGApi, ErrorHandler, AbstractListDict
+        HAS_IDG_DEPS = True
+    except ImportError:
+        pass
 
 # Version control
-__MODULE_NAME = yaml.load(DOCUMENTATION)['module']
+__MODULE_NAME = "idg_domain_fetch"
 __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 
 def main():
-
-    try:
+    # Validates the dependence of the utility module
+    if HAS_IDG_DEPS:
         module_args = dict(
             domain=dict(type='str', required=True),  # Domain name
             path=dict(type='str', required=True),  # Remote absolute path for file or directory
@@ -137,43 +143,47 @@ def main():
             argument_spec=module_args,
             supports_check_mode=True
         )
+    else:
+        # Failure AnsibleModule instance
+        module = AnsibleModule(
+            argument_spec={},
+            check_invalid_arguments=False
+        )
+        module.fail_json(msg="The IDG utils modules is required")
 
-        # Validates the dependence of the utility module
-        if not HAS_IDG_DEPS:
-            module.fail_json(msg="The IDG utils modules is required")
+    # Parse arguments to dict
+    idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
+    domain_name = module.params['domain']
+    recursive = module.params['recursive']
 
-        # Parse arguments to dict
-        idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
-        domain_name = module.params['domain']
-        recursive = module.params['recursive']
+    path = module.params['path']
+    _pparse = urlparse(path)
+    _pldir = _pparse.scheme  # IDG base directory
+    _prpath = _pparse.path  # Relative path
+    _ppath_list = [d for d in _prpath.split('/') if d.strip() != '']
 
-        path = module.params['path']
-        _pparse = urlparse(path)
-        _pldir = _pparse.scheme  # IDG base directory
-        _prpath = _pparse.path  # Relative path
-        _ppath_list = [d for d in _prpath.split('/') if d.strip() != '']
+    # Init IDG API connect
+    idg_mgmt = IDGApi(ansible_module=module,
+                      idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
+                      headers=IDGUtils.BASIC_HEADERS,
+                      http_agent=IDGUtils.HTTP_AGENT_SPEC,
+                      use_proxy=idg_data_spec['use_proxy'],
+                      timeout=idg_data_spec['timeout'],
+                      validate_certs=idg_data_spec['validate_certs'],
+                      user=idg_data_spec['user'],
+                      password=idg_data_spec['password'],
+                      force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
-        # Init IDG API connect
-        idg_mgmt = IDGApi(ansible_module=module,
-                          idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
-                          headers=IDGUtils.BASIC_HEADERS,
-                          http_agent=IDGUtils.HTTP_AGENT_SPEC,
-                          use_proxy=idg_data_spec['use_proxy'],
-                          timeout=idg_data_spec['timeout'],
-                          validate_certs=idg_data_spec['validate_certs'],
-                          user=idg_data_spec['user'],
-                          password=idg_data_spec['password'],
-                          force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
+    export_action_msg = {"Export": {"Format": "ZIP", "AllFiles": "on", "Persisted": "off", "IncludeInternalFiles": "off", "Object": []}}
 
-        export_action_msg = {"Export": {"Format":"ZIP", "AllFiles":"on", "Persisted":"off", "IncludeInternalFiles":"off", "Object": []}}
+    # Intermediate values ​​for result
+    tmp_result = {"msg": IDGUtils.COMPLETED_MESSAGE, "directory": None, "files": None}
 
-        #
-        # Here the action begins
-        #
+    #
+    # Here the action begins
+    #
 
-        # Intermediate values ​​for result
-        tmp_result={"msg": IDGUtils.COMPLETED_MESSAGE, "directory": None, "files": None}
-
+    try:
         if _pldir + ':' in IDGUtils.IDG_DIRS:  # Base IDG directory is OK
 
             api_uri = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), _pldir] + _ppath_list)  # Path prefix
@@ -197,8 +207,8 @@ def main():
 
                             if exp_code == 202 and exp_msg == 'Accepted':
                                 # Asynchronous actions export accepted. Wait for complete
-                                _ = idg_mgmt.wait_for_action_end(IDGApi.URI_ACTION.format(domain_name), href=exp_data['_links']['location']['href'],
-                                                                 state=state)
+                                dummy = idg_mgmt.wait_for_action_end(IDGApi.URI_ACTION.format(domain_name), href=exp_data['_links']['location']['href'],
+                                                                     state=state)
                                 # Export completed. Get result
                                 doex_code, doex_msg, doex_data = idg_mgmt.api_call(exp_data['_links']['location']['href'], method='GET')
 
@@ -220,7 +230,7 @@ def main():
 
                                         os.chdir(local_target_home)
                                         with ZipFile(local_target_zip, "w", ZIP_DEFLATED, allowZip64=True) as zf:
-                                            for root, _, filenames in os.walk(os.path.basename(local_target)):
+                                            for root, dummy, filenames in os.walk(os.path.basename(local_target)):
                                                 for name in filenames:
                                                     name = os.path.join(root, name)
                                                     name = os.path.normpath(name)
@@ -261,7 +271,8 @@ def main():
                                 if dw_code == 200 and dw_msg == 'OK':
                                     files.append({"name": f, "file": dw_data['file']})
                                 else:
-                                    module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(dw_data['error'])))
+                                    module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name)
+                                                     + str(ErrorHandler(dw_data['error'])))
 
                             tmp_result['files'] = files
 
@@ -292,11 +303,6 @@ def main():
         for k, v in tmp_result.items():
             if v is not None:
                 result[k] = v
-
-    except (NameError, UnboundLocalError) as e:
-        # Very early error
-        module_except = AnsibleModule(argument_spec={})
-        module_except.fail_json(msg=to_native(e))
 
     except Exception as e:
         # Uncontrolled exception

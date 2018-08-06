@@ -115,29 +115,34 @@ payload:
 '''
 
 import json
-import yaml
 # import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
 
 # Common package of our implementation for IDG
+HAS_IDG_DEPS = False
 try:
     from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils
-    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi
+    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, ErrorHandler
     HAS_IDG_DEPS = True
 except ImportError:
-    HAS_IDG_DEPS = False
+    try:
+        from library.module_utils.idg_common import result, idg_endpoint_spec, IDGUtils
+        from library.module_utils.idg_rest_mgmt import IDGApi, ErrorHandler
+        HAS_IDG_DEPS = True
+    except ImportError:
+        pass
 
 # Version control
-__MODULE_NAME = yaml.load(DOCUMENTATION)['module']
+__MODULE_NAME = "idg_rest_mgmt"
 __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 
 def main():
-
-    try:
+    # Validates the dependence of the utility module
+    if HAS_IDG_DEPS:
         module_args = dict(
             method=dict(type='str', required=False, default='GET', choices=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']),  # HTTP methods
             uri=dict(type='str', required=True),  # URI of the request
@@ -150,34 +155,38 @@ def main():
             argument_spec=module_args,
             supports_check_mode=True
         )
+    else:
+        # Failure AnsibleModule instance
+        module = AnsibleModule(
+            argument_spec={},
+            check_invalid_arguments=False
+        )
+        module.fail_json(msg="The IDG utils modules is required")
 
-        # Validates the dependence of the utility module
-        if not HAS_IDG_DEPS:
-            module.fail_json(msg="The IDG utils modules is required")
+    # Parse arguments to dict
+    idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
+    payload = json.dumps(module.params['payload']) if module.params['payload'] else None
 
-        # Parse arguments to dict
-        idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
-        payload = json.dumps(module.params['payload']) if module.params['payload'] else None
+    result.update({"http_code": None, "http_phrase": None, "payload": None})
 
-        result.update({"http_code": None, "http_phrase": None, "payload": None})
+    # Init IDG API connect
+    idg_mgmt = IDGApi(ansible_module=module,
+                      idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
+                      headers=IDGUtils.BASIC_HEADERS,
+                      http_agent=IDGUtils.HTTP_AGENT_SPEC,
+                      use_proxy=idg_data_spec['use_proxy'],
+                      timeout=idg_data_spec['timeout'],
+                      validate_certs=idg_data_spec['validate_certs'],
+                      user=idg_data_spec['user'],
+                      password=idg_data_spec['password'],
+                      force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
-        # Init IDG API connect
-        idg_mgmt = IDGApi(ansible_module=module,
-                          idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
-                          headers=IDGUtils.BASIC_HEADERS,
-                          http_agent=IDGUtils.HTTP_AGENT_SPEC,
-                          use_proxy=idg_data_spec['use_proxy'],
-                          timeout=idg_data_spec['timeout'],
-                          validate_certs=idg_data_spec['validate_certs'],
-                          user=idg_data_spec['user'],
-                          password=idg_data_spec['password'],
-                          force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
+    #
+    # Here the action begins
+    #
+    # pdb.set_trace()
 
-        #
-        # Here the action begins
-        #
-        # pdb.set_trace()
-
+    try:
         # Do request
         result['http_code'], result['http_phrase'], result['payload'] = idg_mgmt.api_call(module.params['uri'], method=module.params['method'],
                                                                                           data=payload)
@@ -191,11 +200,6 @@ def main():
         result['msg'] = IDGUtils.COMPLETED_MESSAGE
         result['changed'] = True
         result['failed'] = True if result['http_code'] >= 400 else False
-
-    except (NameError, UnboundLocalError) as e:
-        # Very early error
-        module_except = AnsibleModule(argument_spec={})
-        module_except.fail_json(msg=to_native(e))
 
     except Exception as e:
         # Uncontrolled exception
