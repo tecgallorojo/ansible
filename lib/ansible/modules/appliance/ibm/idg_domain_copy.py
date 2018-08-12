@@ -244,7 +244,7 @@ def main():
         if os.path.isdir(src):  # The source is a directory
 
             # If the user is working in only check mode we do not want to make any changes
-            IDGUtils.implement_check_mode(module, result)
+            IDGUtils.implement_check_mode(module)
 
             if recursive:
                 for home, subdirs, files in os.walk(src):  # Loop over directory
@@ -295,7 +295,7 @@ def main():
             if (ck_code == 200 and ck_msg == 'OK') or (ck_code == 404 and ck_msg == 'Not Found'):
                 if 'filestore' in ck_data.keys():  # Is directory
                     # If the user is working in only check mode we do not want to make any changes
-                    IDGUtils.implement_check_mode(module, result)
+                    IDGUtils.implement_check_mode(module)
 
                     file_name = src.split(os.sep)[-1]
                     uri_file = '/'.join([remote_home_path, file_name])  # Update URI for file
@@ -308,7 +308,7 @@ def main():
 
                 else:
                     # If the user is working in only check mode we do not want to make any changes
-                    IDGUtils.implement_check_mode(module, result)
+                    IDGUtils.implement_check_mode(module)
 
                     if backup:  # check backup
                         tmp_result["backup_file"] = do_backup(module, idg_mgmt, remote_home_path, idg_path, domain_name)

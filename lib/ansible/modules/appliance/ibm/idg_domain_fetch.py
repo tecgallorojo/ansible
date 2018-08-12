@@ -196,7 +196,7 @@ def main():
                     if recursive:  # recursively download the entire directory
 
                         # If the user is working in only check mode we do not want to make any changes
-                        IDGUtils.implement_check_mode(module, result)
+                        IDGUtils.implement_check_mode(module)
 
                         tmp_dir = tempfile.mkdtemp()  # create temp directory
 
@@ -259,7 +259,7 @@ def main():
                     else:  # Only files in the designated directory
 
                         # If the user is working in only check mode we do not want to make any changes
-                        IDGUtils.implement_check_mode(module, result)
+                        IDGUtils.implement_check_mode(module)
 
                         if 'file' in ck_data['filestore']['location'].keys():
 
@@ -282,7 +282,7 @@ def main():
                 else:  # Is file
 
                     # If the user is working in only check mode we do not want to make any changes
-                    IDGUtils.implement_check_mode(module, result)
+                    IDGUtils.implement_check_mode(module)
 
                     tmp_result['files'] = [{"name": _ppath_list[-1], "file": ck_data['file']}]
 

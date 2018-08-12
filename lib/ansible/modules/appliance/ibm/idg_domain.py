@@ -433,7 +433,7 @@ def main():
                     if state == 'present':  # Create it
 
                         # If the user is working in only check mode we do not want to make any changes
-                        IDGUtils.implement_check_mode(module, result)
+                        IDGUtils.implement_check_mode(module)
 
                         create_code, create_msg, create_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_CONFIG.format(domain_name), method='PUT',
                                                                                  data=json.dumps(domain_obj_msg))
@@ -475,7 +475,7 @@ def main():
                         if state == 'present' and (domain_obj_msg['Domain'] != dc_data['Domain']):  # Need update
 
                             # If the user is working in only check mode we do not want to make any changes
-                            IDGUtils.implement_check_mode(module, result)
+                            IDGUtils.implement_check_mode(module)
 
                             upd_code, upd_msg, upd_json = idg_mgmt.api_call(IDGApi.URI_DOMAIN_CONFIG.format(domain_name), method='PUT',
                                                                             data=json.dumps(domain_obj_msg))
@@ -496,7 +496,7 @@ def main():
                         elif state == 'restarted':  # Restart domain
 
                             # If the user is working in only check mode we do not want to make any changes
-                            IDGUtils.implement_check_mode(module, result)
+                            IDGUtils.implement_check_mode(module)
 
                             restart_code, restart_msg, restart_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
                                                                                         data=json.dumps(restart_act_msg))
@@ -542,7 +542,7 @@ def main():
                                     if domain_quiesce_status == '':
 
                                         # If the user is working in only check mode we do not want to make any changes
-                                        IDGUtils.implement_check_mode(module, result)
+                                        IDGUtils.implement_check_mode(module)
 
                                         # Quiesce domain
                                         qd_code, qd_msg, qd_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
@@ -581,7 +581,7 @@ def main():
                                     if domain_quiesce_status == 'quiesced':
 
                                         # If the user is working in only check mode we do not want to make any changes
-                                        IDGUtils.implement_check_mode(module, result)
+                                        IDGUtils.implement_check_mode(module)
 
                                         # Unquiesce domain
                                         uqd_code, uqd_msg, uqd_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
@@ -630,7 +630,7 @@ def main():
                 if domain_name in configured_domains:  # Domain EXIST.
 
                     # If the user is working in only check mode we do not want to make any changes
-                    IDGUtils.implement_check_mode(module, result)
+                    IDGUtils.implement_check_mode(module)
 
                     # Remove
                     del_code, del_msg, del_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_CONFIG.format(domain_name), method='DELETE')

@@ -219,7 +219,7 @@ def main():
                 if state == 'present':
 
                     # If the user is working in only check mode we do not want to make any changes
-                    IDGUtils.implement_check_mode(module, result)
+                    IDGUtils.implement_check_mode(module)
 
                     # pdb.set_trace()
                     create_code, create_msg, create_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
@@ -263,7 +263,7 @@ def main():
                 elif state == 'absent':
 
                     # If the user is working in only check mode we do not want to make any changes
-                    IDGUtils.implement_check_mode(module, result)
+                    IDGUtils.implement_check_mode(module)
 
                     # pdb.set_trace()
                     rm_code, rm_msg, rm_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
@@ -311,7 +311,7 @@ def main():
                 elif state == 'restored':
 
                     # If the user is working in only check mode we do not want to make any changes
-                    IDGUtils.implement_check_mode(module, result)
+                    IDGUtils.implement_check_mode(module)
 
                     # pdb.set_trace()
                     bak_code, bak_msg, bak_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',

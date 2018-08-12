@@ -346,7 +346,7 @@ def main():
                 if state == 'exported':
 
                     # If the user is working in only check mode we do not want to make any changes
-                    IDGUtils.implement_check_mode(module, result)
+                    IDGUtils.implement_check_mode(module)
 
                     # export and finish
                     # pdb.set_trace()
@@ -382,7 +382,7 @@ def main():
                 elif state == 'reseted':
 
                     # If the user is working in only check mode we do not want to make any changes
-                    IDGUtils.implement_check_mode(module, result)
+                    IDGUtils.implement_check_mode(module)
 
                     # Reseted domain
                     reset_code, reset_msg, reset_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
@@ -430,7 +430,7 @@ def main():
                         if domain_save_needed != 'off':
 
                             # If the user is working in only check mode we do not want to make any changes
-                            IDGUtils.implement_check_mode(module, result)
+                            IDGUtils.implement_check_mode(module)
 
                             save_code, save_msg, save_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
                                                                                data=json.dumps(save_act_msg))
@@ -466,7 +466,7 @@ def main():
                 elif state == 'imported':
 
                     # If the user is working in only check mode we do not want to make any changes
-                    IDGUtils.implement_check_mode(module, result)
+                    IDGUtils.implement_check_mode(module)
 
                     # Import
                     # pdb.set_trace()

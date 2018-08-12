@@ -106,7 +106,10 @@ class IDGApi(object):
     # Domains
     URI_DOMAIN_LIST = "/mgmt/domains/config/"
     # Management
-    URI_DOMAIN_CONFIG = "/mgmt/config/default/Domain/{0}"
+    # Config URI
+    URI_CONFIG = "/mgmt/config/{0}"
+    # Domain config
+    URI_DOMAIN_CONFIG = URI_CONFIG.format("default") + "/Domain/{0}"
     URI_DOMAIN_STATUS = "/mgmt/status/default/DomainStatus"
     # Actions
     URI_ACTION = "/mgmt/actionqueue/{0}"

@@ -243,7 +243,7 @@ def main():
 
                     else:  # Not exist, create it
                         # If the user is working in only check mode we do not want to make any changes
-                        IDGUtils.implement_check_mode(module, result)
+                        IDGUtils.implement_check_mode(module)
 
                         create_dir_msg = {"directory": {"name": d}}
                         cr_code, cr_msg, cr_data = idg_mgmt.api_call(td, method='PUT', data=json.dumps(create_dir_msg))
@@ -260,7 +260,7 @@ def main():
         elif state == 'move':  # Move remote files
 
             # If the user is working in only check mode we do not want to make any changes
-            IDGUtils.implement_check_mode(module, result)
+            IDGUtils.implement_check_mode(module)
 
             move_file_msg = {"MoveFile": {"sURL": module.params['source'].strip('/'), "dURL": path.strip('/'),
                              "Overwrite": IDGUtils.str_on_off(module.params['overwrite'])}}
@@ -276,7 +276,7 @@ def main():
         elif state == 'show':  # Show details of file or content of directories
 
             # If the user is working in only check mode we do not want to make any changes
-            IDGUtils.implement_check_mode(module, result)
+            IDGUtils.implement_check_mode(module)
 
             list_target = '/'.join([td] + path_as_list)
             sh_code, sh_msg, sh_data = idg_mgmt.api_call(list_target, method='GET')
@@ -311,7 +311,7 @@ def main():
             # Remove directory recursively
 
             # If the user is working in only check mode we do not want to make any changes
-            IDGUtils.implement_check_mode(module, result)
+            IDGUtils.implement_check_mode(module)
 
             td = '/'.join([td] + path_as_list)
             rm_code, rm_msg, rm_data = idg_mgmt.api_call(td, method='DELETE')

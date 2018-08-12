@@ -60,10 +60,14 @@ class IDGUtils(object):
                 "pubcert:", "sharedcert:", "store:", "tasktemplates:", "temporary:"]
 
     @staticmethod
-    def implement_check_mode(module, result):
+    def implement_check_mode(module):
         if module.check_mode:
-            result['msg'] = IDGUtils.CHECK_MODE_MESSAGE
-            module.exit_json(**result)
+            r = dict(
+                failed=False,
+                changed=False,
+                msg = IDGUtils.CHECK_MODE_MESSAGE
+            )
+            module.exit_json(**r)
 
     @staticmethod
     def parse_to_dict(module, data, desc, ver):
