@@ -130,7 +130,6 @@ import json
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
-from http import HTTPStatus
 
 # Common package of our implementation for IDG
 HAS_IDG_DEPS = False

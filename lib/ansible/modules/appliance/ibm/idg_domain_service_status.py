@@ -160,7 +160,8 @@ def main():
             # List of existing services
             if "ServicesStatus" in sstatus_data.keys():
                 if service_filter is not None:
-                    active_services = [s for s in AbstractListDict(sstatus_data['ServicesStatus']).raw_data() if re.match(service_filter, s['ServiceName'], filter_flags)]
+                    active_services = [s for s in AbstractListDict(sstatus_data['ServicesStatus']).raw_data() if
+                                       re.match(service_filter, s['ServiceName'], filter_flags)]
                 else:
                     active_services = sstatus_data['ServicesStatus']
 
