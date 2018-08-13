@@ -13,22 +13,27 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 ---
-module: idg_domain_status
-short_description: List of domains and their configurations
+module: idg_domain_service_status
+short_description: Lists local services
 description:
-  - List of domains present in the IBM DataPower Gateway(IDG) and their configurations.
+  - Lists all local services that are listening for incoming connections.
 version_added: "2.7"
 options:
 
   filter:
     description:
-      - Domain name filter.
+      - Service name filter.
 
   ignore_case:
     description:
       - Perform case-insensitive matching.
     type: bool
     default: True
+
+  domain:
+    description:
+      - Domain identifier.
+    required: True
 
 extends_documentation_fragment: idg
 
@@ -51,16 +56,10 @@ EXAMPLES = '''
 
   tasks:
 
-  - name: Display a specific domain
-    idg_domain_status:
+  - name: Show all active services
+    idg_domain_services_status:
         idg_connection: "{{ remote_idg }}"
-        filter: "{{ domain_name }}"
-    vars:
-        - domain_name: ProdDomain
-
-  - name: Show all domains
-    idg_domain_status:
-        idg_connection: "{{ remote_idg }}"
+        domain: check-production
 '''
 
 RETURN = '''
@@ -84,18 +83,18 @@ from ansible.module_utils._text import to_native
 HAS_IDG_DEPS = False
 try:
     from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils
-    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, ErrorHandler
+    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, ErrorHandler, AbstractListDict
     HAS_IDG_DEPS = True
 except ImportError:
     try:
         from library.module_utils.idg_common import result, idg_endpoint_spec, IDGUtils
-        from library.module_utils.idg_rest_mgmt import IDGApi, ErrorHandler
+        from library.module_utils.idg_rest_mgmt import IDGApi, ErrorHandler, AbstractListDict
         HAS_IDG_DEPS = True
     except ImportError:
         pass
 
 # Version control
-__MODULE_NAME = "idg_domain_status"
+__MODULE_NAME = "idg_domain_service_status"
 __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
@@ -104,8 +103,9 @@ def main():
     # Validates the dependence of the utility module
     if HAS_IDG_DEPS:
         module_args = dict(
-            filter=dict(type='str', required=False, default=None),  # Domain to search
-            ignore_case=dict(type='bool', required=False, default=True),  # Case-insensitive matching
+            filter=dict(type='str', required=False, default=None),  # Service to search
+            ignore_case=dict(type='bool', required=False, default=True),  # # Case-insensitive matching
+            domain=dict(type='str', required=True),  # Domain name
             idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True)  # IDG connection
         )
 
@@ -125,9 +125,11 @@ def main():
     # Parse arguments to dict
     idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
 
-    # Domain to search
-    domain_filter = module.params['filter']
+    # Service to search
+    service_filter = module.params['filter']
     filter_flags = re.IGNORECASE if module.params['ignore_case'] else 0
+
+    domain_name = module.params['domain']
 
     # Init IDG API connect
     idg_mgmt = IDGApi(ansible_module=module,
@@ -142,7 +144,7 @@ def main():
                       force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
     # Intermediate values ​​for result
-    tmp_result = {"msg": IDGUtils.COMPLETED_MESSAGE, "domain_status": []}
+    tmp_result = {"msg": IDGUtils.COMPLETED_MESSAGE, "service_status": []}
 
     #
     # Here the action begins
@@ -151,56 +153,24 @@ def main():
 
     try:
         # List of configured domains and their status
-        dstatus_code, dstatus_msg, dstatus_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_STATUS, method='GET')
+        sstatus_code, sstatus_msg, sstatus_data = idg_mgmt.api_call(IDGApi.URI_STATUS.format(domain_name) + "/ServicesStatus", method='GET')
 
-        if dstatus_code == 200 and dstatus_msg == 'OK':  # If the answer is correct
+        if sstatus_code == 200 and sstatus_msg == 'OK':  # If the answer is correct
 
-            # List of existing domains
-            if isinstance(dstatus_data['DomainStatus'], dict):  # if has only default domain
-                configured_domains = [dstatus_data['DomainStatus'] if (domain_filter is None) or
-                                                                      (re.match(domain_filter, dstatus_data['DomainStatus']['Domain'], filter_flags))
-                                      else None]
-            else:
-                if domain_filter is not None:
-                    configured_domains = [d for d in dstatus_data['DomainStatus'] if re.match(domain_filter, d['Domain'], filter_flags)]
+            # List of existing services
+            if "ServicesStatus" in sstatus_data.keys():
+                if service_filter is not None:
+                    active_services = [s for s in AbstractListDict(sstatus_data['ServicesStatus']).raw_data() if re.match(service_filter, s['ServiceName'], filter_flags)]
                 else:
-                    configured_domains = dstatus_data['DomainStatus']
+                    active_services = sstatus_data['ServicesStatus']
 
-            if configured_domains != [] and configured_domains != [None]:
-                for d in configured_domains:
-
-                    if d is None:  # don't process it
-                        continue
-
-                    for field in ["DebugEnabled", "DiagEnabled", "ProbeEnabled", "SaveNeeded", "TraceEnabled"]:
-                        d.update({field: IDGUtils.bool_on_off(d[field])})
-
-                    # Get domain configuration
-                    dconf_code, dconf_msg, dconf_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_CONFIG.format(d['Domain']), method='GET')
-
-                    ds = {}  # State of each domain
-                    if dconf_code == 200 and dconf_msg == 'OK':
-                        ds.update(d)  # Add status data
-
-                        # Add configuration data
-                        ds.update({"mAdminState": dconf_data["Domain"]["mAdminState"]})
-                        if 'UserSummary' in dconf_data["Domain"]:
-                            ds.update({"UserSummary": dconf_data["Domain"]["UserSummary"]})
-                        else:
-                            ds.update({"UserSummary": ""})
-
-                        tmp_result['domain_status'].append(ds)  # Add domain
-
-                    else:
-                        # Can't read domain configuration
-                        module.fail_json(msg="Unable to get configuration from domain {0}.".format(d['Domain']))
+                tmp_result['service_status'] = active_services
 
             else:
-                # Domain not exist
-                module.fail_json(msg=IDGApi.ERROR_NOT_DOMAIN)
+                tmp_result['msg'] = sstatus_data['result']
 
-        else:  # Can't read domain's lists
-            module.fail_json(msg=IDGApi.ERROR_GET_DOMAIN_LIST)
+        else:  # Can't read service's status
+            module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(sstatus_data['error'])))
 
         #
         # Finish

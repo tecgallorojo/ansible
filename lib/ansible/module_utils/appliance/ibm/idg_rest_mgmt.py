@@ -49,8 +49,12 @@ class AbstractListDict(object):
     def values(self, **kwargs):
         return self.d[kwargs['key']]
 
-    def raw_data(self, **kwargs):
+    def raw_data(self):
         return self.data
+
+    def filter(self, **kwargs):
+        f = [d for d in self.values(key=kwargs['key']) if re.match(kwargs['pattern'], d, kwargs['flags'])]
+        return f
 
 
 class AbstractListStr(object):
@@ -110,7 +114,9 @@ class IDGApi(object):
     URI_CONFIG = "/mgmt/config/{0}"
     # Domain config
     URI_DOMAIN_CONFIG = URI_CONFIG.format("default") + "/Domain/{0}"
-    URI_DOMAIN_STATUS = "/mgmt/status/default/DomainStatus"
+    # Status
+    URI_STATUS = "/mgmt/status/{0}"
+    URI_DOMAIN_STATUS = URI_STATUS.format('default') + "/DomainStatus"
     # Actions
     URI_ACTION = "/mgmt/actionqueue/{0}"
     # File and directory management
