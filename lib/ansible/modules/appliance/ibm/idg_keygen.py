@@ -50,6 +50,18 @@ options:
         description:
           - Organizational unit name.
 
+      organizational_unit1:
+        description:
+          - First additional organizational unit.
+
+      organizational_unit2:
+        description:
+          - Second additional organizational unit.
+
+      organizational_unit3:
+        description:
+          - Third additional organizational unit.
+
       common_name:
         description:
           - Fully qualified domain name of the server.
@@ -71,9 +83,10 @@ options:
       - Domain identifier.
     required: True
 
-  file_name:
+  prefix_name:
     description:
       - Specifies a common prefix for the generated private key, CSR, and self-signed certificate.
+      - If not specified, the value of the common_name parameter is used to generate one.
 
   password_alias:
     description:
@@ -156,15 +169,15 @@ options:
     default: False
     type: bool
 
+  using_key:
+    description:
+      - Specify the name of an existing key object. The action creates a new certificate and CSR for this key. The action does not create a new key.
+
   hsm:
     description:
       - Creates the private key on the HSM instead of in memory.
     default: False
     type: bool
-
-  hsm_name:
-    description:
-      - A label for the key created on the HSM. If not specified, the value of the object-name parameter is used.
 
 extends_documentation_fragment: idg
 
@@ -193,7 +206,7 @@ EXAMPLES = '''
     idg_keygen:
         certificate_data: "{{ content }}"
         domain: "{{ domain_name }}"
-        file_name: pki-api
+        prefix_name: pki-api
         idg_connection: "{{ remote_idg }}"
         password_alias: "{{ passw_map_alias }}"
     vars:
@@ -218,7 +231,7 @@ key-file:
 sscert-file:
   description:
     - The name generated self-signed certificate.
-  returned: success
+  returned: success and I(gen_sscert=True)
   type: string
   sample:
     - portal-server.pem
@@ -241,6 +254,7 @@ msg:
 '''
 
 import json
+import copy
 import pdb
 
 from ansible.module_utils.basic import AnsibleModule
@@ -271,14 +285,14 @@ def main():
     if HAS_IDG_DEPS:
 
         certificate_spec = {
-          "country": dict(type='str', default=''),
-          "state": dict(type='str', default=''),
-          "locality": dict(type='str', default=''),
-          "organization": dict(type='str', default=''),
-          "organizational_unit":dict(type='str', default=''),
-          "organizational_unit1":dict(type='str', default=''),
-          "organizational_unit2":dict(type='str', default=''),
-          "organizational_unit3":dict(type='str', default=''),
+          "country": dict(type='str'),
+          "state": dict(type='str'),
+          "locality": dict(type='str'),
+          "organization": dict(type='str'),
+          "organizational_unit":dict(type='str'),
+          "organizational_unit1":dict(type='str'),
+          "organizational_unit2":dict(type='str'),
+          "organizational_unit3":dict(type='str'),
           "common_name": dict(type='str', required=True),
           "days": dict(type='int', default=365)
         }
@@ -289,7 +303,7 @@ def main():
             certificate_data=dict(type='dict', options=certificate_spec, required=True),  # Certificate data
             ldap_reverse_order=dict(type='bool', default=False),
             domain=dict(type='str', required=True),  # Domain
-            file_name=dict(type='str', required=False),  # prefix for the generated private key, CSR, and certificate
+            prefix_name=dict(type='str', required=False),  # prefix for the generated private key, CSR, and certificate
             password_alias=dict(type='str'),
             key_type=dict(type='str', choices=['RSA', 'ECDSA'], default='RSA'),
             key_length=dict(type='int', choices=[1024, 2048, 4096], default=2048),
@@ -327,6 +341,14 @@ def main():
 
     domain_name = module.params['domain']
 
+    CRYPTO_FORMAT_EXT="pem"  # Cryptographic file extension
+    CSR_EXT="csr"
+    CRYPTO_KEY_POSTFIX="privkey"
+    CRYPTO_SSC_POSTFIX="sscert"
+
+    TMP_DIR="temporary:/"
+    CERT_DIR="cert:/"
+
     # Init IDG API connect
     idg_mgmt = IDGApi(ansible_module=module,
                       idg_host="https://{0}:{1}".format(idg_data_spec['server'], idg_data_spec['server_port']),
@@ -340,7 +362,7 @@ def main():
                       force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
     # Create
-    create_msg = { "Keygen": {
+    create_tpl = { "Keygen": {
         "LDAPOrder": IDGUtils.str_on_off(module.params['ldap_reverse_order']),
         "C": certificate_data['country'],
         "ST": certificate_data['state'],
@@ -356,7 +378,7 @@ def main():
         "KeyLength": module.params['key_length'],
         "Digest": module.params['digest'],
         "ECDSACurve": module.params['ecdsa_curve'],
-        "FileName": module.params['file_name'],
+        "FileName": module.params['prefix_name'],
         "PasswordAlias": module.params['password_alias'],
         "ExportKey": IDGUtils.str_on_off(module.params['export_key']),
         "ExportSSCert": IDGUtils.str_on_off(module.params['export_sscert']),
@@ -365,88 +387,54 @@ def main():
         "UsingKey": module.params['using_key']
     }}
 
-    for k, v in create_msg['Keygen'].items():
-        if str(v).strip() == '':
+    create_msg = copy.deepcopy(create_tpl)
+    for k, v in create_tpl['Keygen'].items():
+        if v is None:
             del create_msg['Keygen'][k]
 
     URI_KEYGEN = IDGApi.URI_ACTION.format(domain_name)
-    # Variable to store the status of the action
-    action_result = ''
 
     # Intermediate values ​​for result
-    tmp_result = {"name": pam_name, "domain": domain_name, "msg": None, "changed": None}
+    tmp_result = {"domain": domain_name, "msg": None, "changed": None, "key-file": None, "sscert-file": None, "csr-file": None}
 
     #
     # Here the action begins
     #
 
-    # pdb.set_trace()
+    pdb.set_trace()
     try:
 
-        # List of configured password alias in domain
-        chk_code, chk_msg, chk_data = idg_mgmt.api_call(URI_PAM_CONFIG, method='GET')
+        code, msg, data = idg_mgmt.api_call(URI_KEYGEN, method='POST', data=json.dumps(create_msg))
 
-        if chk_code == 200 and chk_msg == 'OK':  # If the answer is correct
+        if code == 200 and msg == 'OK':  # If the answer is correct
+            tmp_result['msg'] = data['Keygen']
+            tmp_result['changed'] = True
 
-            if 'PasswordAlias' in chk_data.keys():
-                pams = AbstractListDict(chk_data['PasswordAlias'])
+            # Directories
+            key_dir = TMP_DIR if module.params['export_key'] else CERT_DIR
+
+            if "FileName" in create_msg["Keygen"].keys():
+                tmp_result['key-file'] = key_dir + create_msg["Keygen"]["FileName"] + '-' + CRYPTO_KEY_POSTFIX + '.' + CRYPTO_FORMAT_EXT
+                if module.params['gen_sscert']:
+                    ssc_dir = TMP_DIR if module.params['export_sscert'] else CERT_DIR
+                    tmp_result['sscert-file'] = ssc_dir + create_msg["Keygen"]["FileName"] + '-' + CRYPTO_SSC_POSTFIX + '.' + CRYPTO_FORMAT_EXT
+                tmp_result['csr-file'] = TMP_DIR + create_msg["Keygen"]["FileName"] + '.' + CSR_EXT
+
             else:
-                pams = AbstractListDict({})
+                tmp_result['key-file'] = key_dir + create_msg["Keygen"]["CN"] + '-' + CRYPTO_KEY_POSTFIX + '.' + CRYPTO_FORMAT_EXT
+                if module.params['gen_sscert']:
+                    ssc_dir = TMP_DIR if module.params['export_sscert'] else CERT_DIR
+                    tmp_result['sscert-file'] = ssc_dir + create_msg["Keygen"]["CN"] + '-' + CRYPTO_SSC_POSTFIX + '.' + CRYPTO_FORMAT_EXT
+                tmp_result['csr-file'] = TMP_DIR + create_msg["Keygen"]["CN"] + '.' + CSR_EXT
 
-            if state == 'present':
-
-                # If the user is working in only check mode we do not want to make any changes
-                IDGUtils.implement_check_mode(module)
-
-                if pam_name not in pams.values(key='name'):  # Create
-
-                    create_code, create_msg, create_data = idg_mgmt.api_call(URI_PAM_CONFIG, method='POST', data=json.dumps(create_msg))
-
-                    if create_code == 201 and create_msg == 'Created':
-                        # Create successfully
-                        tmp_result['msg'] = create_data[pam_name]
-                        tmp_result['changed'] = True
-
-                    else:
-                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(create_data['error'])))
-
-                else:  # Update
-                    upd_code, upd_msg, upd_data = idg_mgmt.api_call(URI_PAM_CONFIG + '/' + pam_name, method='PUT', data=json.dumps(create_msg))
-
-                    if upd_code == 200 and upd_msg == 'OK':
-                        # Update successfully
-                        tmp_result['msg'] = upd_data[pam_name]
-                        tmp_result['changed'] = True
-
-                    else:
-                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(upd_data['error'])))
-
-            elif state == 'absent':
-
-                # If the user is working in only check mode we do not want to make any changes
-                IDGUtils.implement_check_mode(module)
-
-                if pam_name in pams.values(key='name'):
-
-                    rem_code, rem_msg, rem_data = idg_mgmt.api_call(URI_PAM_CONFIG + '/' + pam_name, method='DELETE')
-
-                    if rem_code == 200 and rem_msg == 'OK':
-                        # Update successfully
-                        tmp_result['msg'] = rem_data[pam_name]
-                        tmp_result['changed'] = True
-
-                    else:
-                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(rem_data['error'])))
-
-                else:
-                    tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
-
-        else:  # Can't read password alias status
-            module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(chk_data['error'])))
+        else:  # Wrong request
+            module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(data['error'])))
 
         #
         # Finish
         #
+        # Customize the result
+        del result['name']
         # Update
         for k, v in tmp_result.items():
             if v is not None:
