@@ -127,7 +127,7 @@ msg:
 '''
 
 import json
-# import pdb
+import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -136,12 +136,12 @@ from ansible.module_utils._text import to_native
 HAS_IDG_DEPS = False
 try:
     from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils
-    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, ErrorHandler
+    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, ErrorHandler, AbstractListDict, RestMgmtResponse
     HAS_IDG_DEPS = True
 except ImportError:
     try:
         from library.module_utils.idg_common import result, idg_endpoint_spec, IDGUtils
-        from library.module_utils.idg_rest_mgmt import IDGApi, ErrorHandler
+        from library.module_utils.idg_rest_mgmt import IDGApi, ErrorHandler, AbstractListDict, RestMgmtResponse
         HAS_IDG_DEPS = True
     except ImportError:
         pass
@@ -214,7 +214,7 @@ def main():
     #
     # Here the action begins
     #
-    # pdb.set_trace()
+    pdb.set_trace()
     try:
         # List of configured domains
         chk_code, chk_msg, chk_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey", method='GET')
@@ -230,7 +230,7 @@ def main():
                 if not exist_obj:  # Create it
                     create_code, create_msg, create_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey", method='POST',
                                                                              data=json.dumps(create_msg))
-                    if create_code == 200 and create_msg == 'OK':
+                    if create_code == 201 and create_msg == 'Created':
                         tmp_result['msg'] = create_data[object_name]
                         tmp_result['changed'] = True
 
@@ -238,13 +238,14 @@ def main():
                         module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(create_data['error'])))
 
                 else:  # Update
-                    ck_code, ck_msg, ck_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey/" object_name, method='GET')
+                    ck_code, ck_msg, ck_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey/" + object_name, method='GET')
 
                     if ck_code == 200 and ck_msg == 'OK':
-                        obj = RestMgmtResponse(ck_data)
+                        obj = RestMgmtResponse(ck_data, banned=["_links", "href", "PasswordAlias"])
 
-                        if obj != create_msg:
-                            del_code, del_msg, del_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey/" object_name, method='DELETE')
+                        pdb.set_trace()
+                        if obj.clear() != create_msg:
+                            del_code, del_msg, del_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey/" + object_name, method='DELETE')
 
                             if del_code == 200 and del_msg == 'OK':
 
@@ -270,7 +271,7 @@ def main():
                     tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
                 else:
-                    del_code, del_msg, del_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey/" object_name, method='DELETE')
+                    del_code, del_msg, del_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey/" + object_name, method='DELETE')
 
                     if del_code == 200 and del_msg == 'OK':
                         tmp_result['msg'] = create_data[object_name]
