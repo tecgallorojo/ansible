@@ -20,40 +20,6 @@ from time import sleep
 #############################
 
 
-class RestMgmtResponse(object):
-    """
-    Management of API response messages
-    """
-    def __init__(self, msg, banned=["_links", "href"]):
-        self.msg=msg
-        self.banned=banned
-
-    def __clear_msg(self, data, cdata={}, root=None):
-      for k, v in data.items():
-        if k not in self.banned:
-            if isinstance(v, dict):
-              cdata[k] = {}
-              self.__clear_msg(v, cdata, k)
-
-            elif isinstance(v, list):
-              cdata[k] = []
-              for e in v:
-                if isinstance(e, dict):
-                    self.__clear_msg(e, cdata, k)
-                else:
-                    cdata[k].append(e)
-            else:
-              if isinstance(cdata[root], dict):
-                  cdata[root].update({k: v})
-              elif isinstance(cdata[root], list):
-                  cdata[root].append({k: v})
-
-    def clear(self):
-        t_msg = {}
-        self.__clear_msg(self.msg, t_msg)
-        return t_msg
-
-
 class AbstractListDict(object):
     """
     Class for the management of the variable result of the api.
