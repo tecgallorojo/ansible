@@ -210,6 +210,7 @@ def main():
 
     # Intermediate values ​​for result
     tmp_result = {"name": object_name, "domain": domain_name, "msg": None, "changed": None, "failed": None}
+    CRYPTOKEY_URI_CFG = IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey"
 
     #
     # Here the action begins
@@ -217,7 +218,7 @@ def main():
     pdb.set_trace()
     try:
         # List of configured domains
-        chk_code, chk_msg, chk_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey", method='GET')
+        chk_code, chk_msg, chk_data = idg_mgmt.api_call(CRYPTOKEY_URI_CFG, method='GET')
 
         if chk_code == 200 and chk_msg == 'OK':  # If the answer is correct
 
@@ -228,7 +229,7 @@ def main():
 
             if state == 'present':
                 if not exist_obj:  # Create it
-                    create_code, create_msg, create_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey", method='POST',
+                    create_code, create_msg, create_data = idg_mgmt.api_call(CRYPTOKEY_URI_CFG, method='POST',
                                                                              data=json.dumps(create_msg))
                     if create_code == 201 and create_msg == 'Created':
                         tmp_result['msg'] = create_data[object_name]
@@ -238,26 +239,28 @@ def main():
                         module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(create_data['error'])))
 
                 else:  # Update
-                    ck_code, ck_msg, ck_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey/" + object_name, method='GET')
+                    ck_code, ck_msg, ck_data = idg_mgmt.api_call(CRYPTOKEY_URI_CFG + "/" + object_name, method='GET')
 
                     if ck_code == 200 and ck_msg == 'OK':
 
                         del ck_data['CryptoKey']['PasswordAlias']
-                        del ck_data['CryptoKey']['Alias']['href']
+                        if "Alias" in ck_data['CryptoKey'].keys():
+                            del ck_data['CryptoKey']['Alias']['href']
 
                         if ck_data['CryptoKey'] != create_msg['CryptoKey']:
-                            del_code, del_msg, del_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey/" + object_name, method='DELETE')
+                            del_code, del_msg, del_data = idg_mgmt.api_call(CRYPTOKEY_URI_CFG + "/" + object_name, method='DELETE')
 
                             if del_code == 200 and del_msg == 'OK':
 
-                                create_code, create_msg, create_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey", method='POST',
+                                create_code, create_msg, create_data = idg_mgmt.api_call(CRYPTOKEY_URI_CFG, method='POST',
                                                                                          data=json.dumps(create_msg))
                                 if create_code == 201 and create_msg == 'Created':
                                     tmp_result['msg'] = create_data[object_name]
                                     tmp_result['changed'] = True
 
                                 else:  # Can't read IDG status
-                                    module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(create_data['error'])))
+                                    module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name)
+                                                     + str(ErrorHandler(create_data['error'])))
 
                             else:  # Can't remove for update object
                                 module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(ck_data['error'])))
@@ -272,7 +275,7 @@ def main():
                     tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
                 else:
-                    del_code, del_msg, del_data = idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/CryptoKey/" + object_name, method='DELETE')
+                    del_code, del_msg, del_data = idg_mgmt.api_call(CRYPTOKEY_URI_CFG + "/" + object_name, method='DELETE')
 
                     if del_code == 200 and del_msg == 'OK':
                         tmp_result['msg'] = del_data[object_name]
