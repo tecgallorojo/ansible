@@ -96,7 +96,7 @@ EXAMPLES = '''
   tasks:
 
   - name: Create crypto certificate object
-    idg_crypto_certificate:
+    idg_crypto_object:
         name: "{{ cert_name }}"
         domain: "{{ domain_name }}"
         idg_connection: "{{ remote_idg }}"
@@ -105,7 +105,7 @@ EXAMPLES = '''
         password_alias: portal-password
 
   - name: Delete crypto certificate object
-    idg_crypto_certificate:
+    idg_crypto_object:
         name: "{{ key_name }}"
         domain: "{{ domain_name }}"
         idg_connection: "{{ remote_idg }}"
@@ -142,7 +142,7 @@ msg:
 '''
 
 import json
-import pdb
+# import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -244,7 +244,7 @@ def main():
     #
     # Here the action begins
     #
-    pdb.set_trace()
+    # pdb.set_trace()
     try:
         # List of configured domains
         chk_code, chk_msg, chk_data = idg_mgmt.api_call(CRYPTOOBJ_URI_CFG, method='GET')
