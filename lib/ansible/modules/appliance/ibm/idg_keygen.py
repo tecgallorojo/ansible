@@ -156,6 +156,10 @@ options:
         - brainpoolP384r1
         - brainpoolP512r1
 
+  using_key:
+    description:
+      - Specify the name of an existing key object. The action creates a new certificate and CSR for this key. The action does not create a new key.
+
   export_key:
     description:
       - Creates a copy of the private key in the U(temporary:) directory in addition to the one in the U(cert:) directory.
@@ -169,9 +173,17 @@ options:
     default: False
     type: bool
 
-  using_key:
+  gen_sscert:
     description:
-      - Specify the name of an existing key object. The action creates a new certificate and CSR for this key. The action does not create a new key.
+      - Create a self-signed certificate in addition to the private key and CSR.
+    default: True
+    type: bool
+
+  gen_object:
+    description:
+      - Vreates key and certificate objects from the specified file.
+    default: True
+    type: bool
 
   hsm:
     description:
@@ -315,8 +327,8 @@ def main():
             using_key=dict(type='str'),
             export_key=dict(type='bool', default=False),
             export_sscert=dict(type='bool', default=False),
-            gen_sscert=dict(type='bool', default=False),
-            gen_object=dict(type='bool', default=False),
+            gen_sscert=dict(type='bool', default=True),
+            gen_object=dict(type='bool', default=True),
             # Validate relation HSM/Object OJO
             hsm=dict(type='bool', default=False),
         )

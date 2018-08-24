@@ -22,7 +22,7 @@ options:
 
   name:
     description:
-      - Public key or certificate identifier
+      - Public key or certificate object identifier
     required: True
 
   domain:
@@ -61,16 +61,16 @@ options:
     description:
       - Specifies the file that contains the public key or certificate.
 
-  password_alias:
-    description:
-      - The alias of the password required to access the file containing the public key and certificate.
-
   ignore_expiration:
     description:
       - Whether to allow certificate-creation outside of expiration values
       - It is only taken when I(object_class=public-key)
     default: False
     type: bool
+
+  password_alias:
+    description:
+      - The alias of the password required to access the file containing the public key and certificate.
 
 extends_documentation_fragment: idg
 
