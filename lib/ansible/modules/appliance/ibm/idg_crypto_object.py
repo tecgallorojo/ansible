@@ -142,7 +142,7 @@ msg:
 '''
 
 import json
-# import pdb
+import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -244,7 +244,7 @@ def main():
     #
     # Here the action begins
     #
-    # pdb.set_trace()
+    pdb.set_trace()
     try:
         # List of configured domains
         chk_code, chk_msg, chk_data = idg_mgmt.api_call(CRYPTOOBJ_URI_CFG, method='GET')
@@ -258,14 +258,14 @@ def main():
 
             if state == 'present':
                 if not exist_obj:  # Create it
-                    create_code, create_msg, create_data = idg_mgmt.api_call(CRYPTOOBJ_URI_CFG, method='POST',
+                    new_code, new_msg, new_data = idg_mgmt.api_call(CRYPTOOBJ_URI_CFG, method='POST',
                                                                              data=json.dumps(create_msg))
-                    if create_code == 201 and create_msg == 'Created':
-                        tmp_result['msg'] = create_data[object_name]
+                    if new_code == 201 and new_msg == 'Created':
+                        tmp_result['msg'] = new_data[object_name]
                         tmp_result['changed'] = True
 
                     else:  # Can't read IDG status
-                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(create_data['error'])))
+                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(new_data['error'])))
 
                 else:  # Update
                     ck_code, ck_msg, ck_data = idg_mgmt.api_call(CRYPTOOBJ_URI_CFG + "/" + object_name, method='GET')
@@ -277,22 +277,16 @@ def main():
                             del ck_data[REQ_OBJECT_ID]['Alias']['href']
 
                         if ck_data[REQ_OBJECT_ID] != create_msg[REQ_OBJECT_ID]:
-                            del_code, del_msg, del_data = idg_mgmt.api_call(CRYPTOOBJ_URI_CFG + "/" + object_name, method='DELETE')
+                            upd_code, upd_msg, upd_data = idg_mgmt.api_call(CRYPTOOBJ_URI_CFG + "/" + object_name, method='PUT',
+                                                                                     data=json.dumps(create_msg))
+                            if upd_code == 200 and upd_msg == 'OK':
+                                tmp_result['msg'] = upd_data[object_name]
+                                tmp_result['changed'] = True
 
-                            if del_code == 200 and del_msg == 'OK':
+                            else:  # Can't read IDG status
+                                module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name)
+                                                 + str(ErrorHandler(upd_data['error'])))
 
-                                create_code, create_msg, create_data = idg_mgmt.api_call(CRYPTOOBJ_URI_CFG, method='POST',
-                                                                                         data=json.dumps(create_msg))
-                                if create_code == 201 and create_msg == 'Created':
-                                    tmp_result['msg'] = create_data[object_name]
-                                    tmp_result['changed'] = True
-
-                                else:  # Can't read IDG status
-                                    module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name)
-                                                     + str(ErrorHandler(create_data['error'])))
-
-                            else:  # Can't remove for update object
-                                module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(ck_data['error'])))
                         else:
                             tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
