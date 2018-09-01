@@ -415,15 +415,15 @@ def main():
 
     try:
         # List of configured domains
-        chk_code, chk_msg, chk_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_LIST, method='GET')
+        idg_mgmt.api_call(IDGApi.URI_DOMAIN_LIST, method='GET', id="list_domains")
 
-        if chk_code == 200 and chk_msg == 'OK':  # If the answer is correct
+        if idg_mgmt.response_ok(idg_mgmt.last_call()):  # If the answer is correct
 
             # List of existing domains
-            if isinstance(chk_data['domain'], dict):  # if has only default domain
-                configured_domains = [chk_data['domain']['name']]
+            if isinstance(idg_mgmt.last_call()['domain'], dict):  # if has only default domain
+                configured_domains = [idg_mgmt.last_call()['domain']['name']]
             else:
-                configured_domains = [d['name'] for d in chk_data['domain']]
+                configured_domains = [d['name'] for d in idg_mgmt.last_call()['domain']]
 
             if state in ('present', 'restarted', 'quiesced', 'unquiesced'):  # They need for or do a domain
 
@@ -435,14 +435,10 @@ def main():
                         # If the user is working in only check mode we do not want to make any changes
                         IDGUtils.implement_check_mode(module)
 
-                        create_code, create_msg, create_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_CONFIG.format(domain_name), method='PUT',
-                                                                                 data=json.dumps(domain_obj_msg))
+                        idg_mgmt.api_call(IDGApi.URI_DOMAIN_CONFIG.format(domain_name), method='PUT', data=json.dumps(domain_obj_msg), id="create_domain")
 
-                        if create_code == 201 and create_msg == 'Created':  # Created successfully
-                            tmp_result['msg'] = idg_mgmt.status_text(create_data[domain_name])
-                            tmp_result['changed'] = True
-                        elif create_code == 200 and create_msg == 'OK':  # Updated successfully
-                            tmp_result['msg'] = idg_mgmt.status_text(create_data[domain_name])
+                        if idg_mgmt.response_created(idg_mgmt.last_call()):  # Created successfully
+                            tmp_result['msg'] = idg_mgmt.status_text(idg_mgmt.last_call()[domain_name])
                             tmp_result['changed'] = True
                         else:
                             # Opps can't create
@@ -456,12 +452,11 @@ def main():
                     # pdb.set_trace()
 
                     # Get current domain configuration
-                    dc_code, dc_msg, dc_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_CONFIG.format(domain_name), method='GET')
+                    idg_mgmt.api_call(IDGApi.URI_DOMAIN_CONFIG.format(domain_name), method='GET', id="exist_domain_config")
 
-                    if dc_code == 200 and dc_msg == 'OK':
-
+                    if idg_mgmt.response_ok(idg_mgmt.last_call()):
                         # We focus only on the properties we administer
-
+                        dc_data = idg_mgmt.last_call() # Save domain configuration
                         del dc_data['_links']
                         for k, v in dc_data['Domain'].items():
                             if k not in domain_obj_items:
@@ -477,39 +472,36 @@ def main():
                             # If the user is working in only check mode we do not want to make any changes
                             IDGUtils.implement_check_mode(module)
 
-                            upd_code, upd_msg, upd_json = idg_mgmt.api_call(IDGApi.URI_DOMAIN_CONFIG.format(domain_name), method='PUT',
-                                                                            data=json.dumps(domain_obj_msg))
+                            idg_mgmt.api_call(IDGApi.URI_DOMAIN_CONFIG.format(domain_name), method='PUT', data=json.dumps(domain_obj_msg), id="update_domain")
 
                             # pdb.set_trace()
-                            if upd_code == 200 and upd_msg == 'OK':
+                            if idg_mgmt.response_ok(idg_mgmt.last_call()):
                                 # Updates successfully
-                                tmp_result['msg'] = idg_mgmt.status_text(upd_json[domain_name])
+                                tmp_result['msg'] = idg_mgmt.status_text(idg_mgmt.last_call()[domain_name])
                                 tmp_result['changed'] = True
                             else:
                                 # Opps can't update
-                                module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(upd_json['error'])))
+                                module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(idg_mgmt.last_call()['error'])))
 
                         elif state == 'present' and (domain_obj_msg['Domain'] == dc_data['Domain']):  # Identicals configurations
                             # The current configuration is identical to the new configuration, there is nothing to do
                             tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
                         elif state == 'restarted':  # Restart domain
-
                             # If the user is working in only check mode we do not want to make any changes
                             IDGUtils.implement_check_mode(module)
 
-                            restart_code, restart_msg, restart_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
-                                                                                        data=json.dumps(restart_act_msg))
+                            idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(restart_act_msg), id="restart_domain")
 
-                            if restart_code == 202 and restart_msg == 'Accepted':
+                            if idg_mgmt.response_accepted(idg_mgmt.last_call()):
                                 # Asynchronous actions restart accepted. Wait for complete
                                 action_result = idg_mgmt.wait_for_action_end(IDGApi.URI_ACTION.format(domain_name),
-                                                                             href=restart_data['_links']['location']['href'], state=state)
+                                                                             href=idg_mgmt.last_call()['_links']['location']['href'], state=state)
 
                                 # Restart completed. Get result
-                                acs_code, acs_msg, acs_data = idg_mgmt.api_call(restart_data['_links']['location']['href'], method='GET')
+                                idg_mgmt.api_call(idg_mgmt.last_call()['_links']['location']['href'], method='GET', id="get_restart_result")
 
-                                if acs_code == 200 and acs_msg == 'OK':
+                                if idg_mgmt.response_ok(idg_mgmt.last_call()):
                                     # Restarted successfully
                                     tmp_result['msg'] = action_result
                                     tmp_result['changed'] = True
@@ -517,58 +509,47 @@ def main():
                                     # Can't retrieve the restart result
                                     module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
-                            elif restart_code == 200 and restart_msg == 'OK':
-                                # Successfully processed synchronized action
-                                tmp_result['msg'] = idg_mgmt.status_text(restart_data['RestartThisDomain'])
-                                tmp_result['changed'] = True
-
                             else:
                                 # Can't restarted
                                 module.fail_json(msg=IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name))
 
                         elif state in ('quiesced', 'unquiesced'):
 
-                            qds_code, qds_msg, qds_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_STATUS, method='GET')
+                            idg_mgmt.api_call(IDGApi.URI_DOMAIN_STATUS, method='GET', id="domain_status")
 
                             # pdb.set_trace()
-                            if qds_code == 200 and qds_msg == 'OK':
+                            if idg_mgmt.response_ok(idg_mgmt.last_call()):
 
-                                if isinstance(qds_data['DomainStatus'], dict):
-                                    domain_quiesce_status = qds_data['DomainStatus']['QuiesceState']
+                                if isinstance(idg_mgmt.last_call()['DomainStatus'], dict):
+                                    domain_quiesce_status = idg_mgmt.last_call()['DomainStatus']['QuiesceState']
                                 else:
-                                    domain_quiesce_status = [d['QuiesceState'] for d in qds_data['DomainStatus'] if d['Domain'] == domain_name][0]
+                                    domain_quiesce_status = [d['QuiesceState'] for d in idg_mgmt.last_call()['DomainStatus'] if d['Domain'] == domain_name][0]
 
                                 if state == 'quiesced':
                                     if domain_quiesce_status == '':
-
                                         # If the user is working in only check mode we do not want to make any changes
                                         IDGUtils.implement_check_mode(module)
 
                                         # Quiesce domain
-                                        qd_code, qd_msg, qd_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
-                                                                                     data=json.dumps(quiesce_act_msg))
+                                        idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(quiesce_act_msg),
+                                                          id="quiesce_domain")
 
                                         # pdb.set_trace()
-                                        if qd_code == 202 and qd_msg == 'Accepted':
+                                        if idg_mgmt.response_accepted(idg_mgmt.last_call()):
                                             # Asynchronous actions quiesce accepted. Wait for complete
                                             action_result = idg_mgmt.wait_for_action_end(IDGApi.URI_ACTION.format(domain_name),
-                                                                                         href=qd_data['_links']['location']['href'], state=state)
+                                                                                         href=idg_mgmt.last_call()['_links']['location']['href'], state=state)
 
                                             # Quiesced completed. Get result
-                                            acs_code, acs_msg, acs_data = idg_mgmt.api_call(qd_data['_links']['location']['href'], method='GET')
+                                            idg_mgmt.api_call(idg_mgmt.last_call()['_links']['location']['href'], method='GET', id="quiesced_result")
 
-                                            if acs_code == 200 and acs_msg == 'OK':
+                                            if idg_mgmt.response_ok(idg_mgmt.last_call()):
                                                 # Quiesced successfully
                                                 tmp_result['msg'] = action_result
                                                 tmp_result['changed'] = True
                                             else:
                                                 # Can't get the quiesced action result
                                                 module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
-
-                                        elif qd_code == 200 and qd_msg == 'OK':
-                                            # Successfully processed synchronized action
-                                            tmp_result['msg'] = idg_mgmt.status_text(qd_data['DomainQuiesce'])
-                                            tmp_result['changed'] = True
 
                                         else:
                                             # Can't quiesced
@@ -584,19 +565,19 @@ def main():
                                         IDGUtils.implement_check_mode(module)
 
                                         # Unquiesce domain
-                                        uqd_code, uqd_msg, uqd_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
-                                                                                        data=json.dumps(unquiesce_act_msg))
+                                        idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(unquiesce_act_msg),
+                                                          id="unquiesce_domain")
 
                                         # pdb.set_trace()
-                                        if uqd_code == 202 and uqd_msg == 'Accepted':
+                                        if idg_mgmt.response_accepted(idg_mgmt.call_by_id("unquiesce_domain")):
                                             # Asynchronous actions unquiesce accepted. Wait for complete
                                             action_result = idg_mgmt.wait_for_action_end(IDGApi.URI_ACTION.format(domain_name),
-                                                                                         href=uqd_data['_links']['location']['href'], state=state)
+                                                                                         href=idg_mgmt.last_call()['_links']['location']['href'], state=state)
 
                                             # Unquiesced completed. Get result
-                                            acs_code, acs_msg, acs_data = idg_mgmt.api_call(uqd_data['_links']['location']['href'], method='GET')
+                                            idg_mgmt.api_call(idg_mgmt.last_call()['_links']['location']['href'], method='GET', id="unquiesced_result")
 
-                                            if acs_code == 200 and acs_msg == 'OK':
+                                            if idg_mgmt.response_ok(idg_mgmt.last_call()):
                                                 # Unquiesce successfully
                                                 tmp_result['msg'] = action_result
                                                 tmp_result['changed'] = True
@@ -604,9 +585,9 @@ def main():
                                                 # Can't get unquiesce final result
                                                 module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
 
-                                        elif uqd_code == 200 and uqd_msg == 'OK':
+                                        elif idg_mgmt.response_ok(idg_mgmt.call_by_id("unquiesce_domain")):
                                             # Successfully processed synchronized action
-                                            tmp_result['msg'] = idg_mgmt.status_text(uqd_data['DomainUnquiesce'])
+                                            tmp_result['msg'] = idg_mgmt.status_text(idg_mgmt.call_by_id("unquiesce_domain")['DomainUnquiesce'])
                                             tmp_result['changed'] = True
 
                                         else:
@@ -628,17 +609,16 @@ def main():
             elif state == 'absent':  # Remove domain
 
                 if domain_name in configured_domains:  # Domain EXIST.
-
                     # If the user is working in only check mode we do not want to make any changes
                     IDGUtils.implement_check_mode(module)
 
                     # Remove
-                    del_code, del_msg, del_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_CONFIG.format(domain_name), method='DELETE')
+                    idg_mgmt.api_call(IDGApi.URI_DOMAIN_CONFIG.format(domain_name), method='DELETE', id="delete_domain")
 
                     # pdb.set_trace()
-                    if del_code == 200 and del_msg == 'OK':
+                    if idg_mgmt.response_ok(idg_mgmt.last_call()):
                         # Remove successfully
-                        tmp_result['msg'] = idg_mgmt.status_text(del_data[domain_name])
+                        tmp_result['msg'] = idg_mgmt.status_text(idg_mgmt.last_call()[domain_name])
                         tmp_result['changed'] = True
                     else:
                         # Can't remove

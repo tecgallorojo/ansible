@@ -146,6 +146,9 @@ class IDGApi(object):
         self.use_proxy = kwargs['use_proxy']
         self.validate_certs = kwargs['validate_certs']
 
+        # Calls stack
+        calls=[]
+
     @staticmethod
     def apifilestore_uri2path(uri):
         # Converts the URI defined for handling the filestore in the corresponding path in DP
@@ -213,7 +216,31 @@ class IDGApi(object):
         except Exception as e:
             self.ansible_module.fail_json(msg=to_native("Unknown error for ({0}). {1}".format(url, str(e))))
         else:
-            return int(resp.getcode()), resp.msg, json.loads(resp.read())
+            calls.append({"code": int(resp.getcode()), "msg": resp.msg, "data": json.loads(resp.read()), "id": kwargs["id"]})
+
+    def last_call(self):
+        try:
+            return self.calls[-1]
+        except Exception as e:
+            return False
+
+    def call_by_id(self, id):
+        for c in self.calls:
+            if c["id"] == id:
+                return id
+        return False
+
+    @staticmethod
+    def response_ok(call):
+        return (call["code"] == 200 and call["msg"] == 'OK')
+
+    @staticmethod
+    def response_created(call):
+        return (call["code"] == 201 and call["msg"] == 'Created')
+
+    @staticmethod
+    def response_accepted(call):
+        return (call["code"] == 202 and call["msg"] == 'Accepted')
 
     def wait_for_action_end(self, uri, **kwargs):
 
