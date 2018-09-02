@@ -196,7 +196,7 @@ results:
 '''
 
 import json
-# import pdb
+#import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -318,7 +318,6 @@ def main():
     # Action messages
     # Reset
     reset_act_msg = {"ResetThisDomain": {}}
-
     # Save
     save_act_msg = {"SaveConfig": {}}
 
@@ -328,52 +327,38 @@ def main():
     #
     # Here the action begins
     #
+    # pdb.set_trace()
 
     try:
         # List of configured domains
-        chk_code, chk_msg, chk_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_LIST, method='GET')
+        idg_mgmt.api_call(IDGApi.URI_DOMAIN_LIST, method='GET', id="list_domains")
 
-        if chk_code == 200 and chk_msg == 'OK':  # If the answer is correct
+        if idg_mgmt.is_ok(idg_mgmt.last_call()):  # If the answer is correct
 
-            if isinstance(chk_data['domain'], dict):  # if has only default domain
-                configured_domains = [chk_data['domain']['name']]
-            else:
-                configured_domains = [d['name'] for d in chk_data['domain']]
+            # List of existing domains
+            configured_domains = IDGUtils.domains_list(idg_mgmt.last_call()["data"]['domain'])
 
             if domain_name in configured_domains:  # Domain EXIST.
 
-                # pdb.set_trace()
                 if state == 'exported':
-
                     # If the user is working in only check mode we do not want to make any changes
                     IDGUtils.implement_check_mode(module)
 
                     # export and finish
-                    # pdb.set_trace()
-                    exp_code, exp_msg, exp_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
-                                                                    data=json.dumps(export_action_msg))
+                    idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(export_action_msg), id="export_domain")
 
-                    if exp_code == 202 and exp_msg == 'Accepted':
+                    if idg_mgmt.is_accepted(idg_mgmt.last_call()):
                         # Asynchronous actions export accepted. Wait for complete
-                        action_result = idg_mgmt.wait_for_action_end(IDGApi.URI_ACTION.format(domain_name), href=exp_data['_links']['location']['href'],
-                                                                     state=state)
+                        idg_mgmt.api_event_sink(IDGApi.URI_ACTION.format(domain_name), href=idg_mgmt.last_call()["data"]['_links']['location']['href'], state=state)
 
-                        # Export completed. Get result
-                        doex_code, doex_msg, doex_data = idg_mgmt.api_call(exp_data['_links']['location']['href'], method='GET')
-
-                        if doex_code == 200 and doex_msg == 'OK':
+                        if idg_mgmt.is_ok(idg_mgmt.last_call()):
                             # Export ok
-                            tmp_result['file'] = doex_data['result']['file']
-                            tmp_result['msg'] = action_result
+                            tmp_result['file'] = idg_mgmt.last_call()["data"]['result']['file']
+                            tmp_result['msg'] = idg_mgmt.last_call()["data"]["status"].capitalize()
                             tmp_result['changed'] = True
                         else:
                             # Can't retrieve the export
                             module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
-
-                    elif exp_code == 200 and exp_msg == 'OK':
-                        # Successfully processed synchronized action
-                        tmp_result['msg'] = idg_mgmt.status_text(exp_data['Export'])
-                        tmp_result['changed'] = True
 
                     else:
                         # Export not accepted
@@ -385,30 +370,19 @@ def main():
                     IDGUtils.implement_check_mode(module)
 
                     # Reseted domain
-                    reset_code, reset_msg, reset_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
-                                                                          data=json.dumps(reset_act_msg))
+                    idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(reset_act_msg), id="reset_domain")
 
-                    # pdb.set_trace()
-                    if reset_code == 202 and reset_msg == 'Accepted':
+                    if idg_mgmt.is_accepted(idg_mgmt.last_call()):
                         # Asynchronous actions reset accepted. Wait for complete
-                        action_result = idg_mgmt.wait_for_action_end(IDGApi.URI_ACTION.format(domain_name), href=reset_data['_links']['location']['href'],
-                                                                     state=state)
+                        idg_mgmt.api_event_sink(IDGApi.URI_ACTION.format(domain_name), href=idg_mgmt.last_call()["data"]['_links']['location']['href'], state=state)
 
-                        # Reseted completed
-                        dore_code, dore_msg, dore_data = idg_mgmt.api_call(reset_data['_links']['location']['href'], method='GET')
-
-                        if dore_code == 200 and dore_msg == 'OK':
+                        if idg_mgmt.is_ok(idg_mgmt.last_call()):
                             # Reseted successfully
-                            tmp_result['msg'] = dore_data['status'].capitalize()
+                            tmp_result['msg'] = idg_mgmt.last_call()["data"]["status"].capitalize()
                             tmp_result['changed'] = True
                         else:
                             # Can't retrieve the reset result
                             module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
-
-                    elif reset_code == 200 and reset_msg == 'OK':
-                        # Successfully processed synchronized action
-                        tmp_result['msg'] = idg_mgmt.status_text(reset_data['ResetThisDomain'])
-                        tmp_result['changed'] = True
 
                     else:
                         # Reseted not accepted
@@ -416,15 +390,14 @@ def main():
 
                 elif state == 'saved':
 
-                    qds_code, qds_msg, qds_data = idg_mgmt.api_call(IDGApi.URI_DOMAIN_STATUS, method='GET')
+                    idg_mgmt.api_call(IDGApi.URI_DOMAIN_STATUS, method='GET', id="get_domain_status")
 
-                    # pdb.set_trace()
-                    if qds_code == 200 and qds_msg == 'OK':
+                    if idg_mgmt.is_ok(idg_mgmt.last_call()):
 
-                        if isinstance(qds_data['DomainStatus'], dict):
-                            domain_save_needed = qds_data['DomainStatus']['SaveNeeded']
+                        if isinstance(idg_mgmt.last_call()["data"]['DomainStatus'], dict):
+                            domain_save_needed = idg_mgmt.last_call()["data"]['DomainStatus']['SaveNeeded']
                         else:
-                            domain_save_needed = [d['SaveNeeded'] for d in qds_data['DomainStatus'] if d['Domain'] == domain_name][0]
+                            domain_save_needed = [d['SaveNeeded'] for d in idg_mgmt.last_call()["data"]['DomainStatus'] if d['Domain'] == domain_name][0]
 
                         # Saved domain
                         if domain_save_needed != 'off':
@@ -432,29 +405,11 @@ def main():
                             # If the user is working in only check mode we do not want to make any changes
                             IDGUtils.implement_check_mode(module)
 
-                            save_code, save_msg, save_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
-                                                                               data=json.dumps(save_act_msg))
+                            idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(save_act_msg), id="save_domain")
 
-                            # pdb.set_trace()
-                            if save_code == 202 and save_msg == 'Accepted':
-                                # Asynchronous actions save accepted. Wait for complete
-                                action_result = idg_mgmt.wait_for_action_end(IDGApi.URI_ACTION.format(domain_name),
-                                                                             href=save_data['_links']['location']['href'], state=state)
-
-                                # Save ready
-                                dosv_code, dosv_msg, dosv_data = idg_mgmt.api_call(save_data['_links']['location']['href'], method='GET')
-
-                                if dosv_code == 200 and dosv_msg == 'OK':
-                                    # Save completed
-                                    tmp_result['msg'] = action_result
-                                    tmp_result['changed'] = True
-                                else:
-                                    # Can't retrieve the save result
-                                    module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
-
-                            elif save_code == 200 and save_msg == 'OK':
+                            if idg_mgmt.is_ok(idg_mgmt.last_call()):
                                 # Successfully processed synchronized action save
-                                tmp_result['msg'] = idg_mgmt.status_text(save_data['SaveConfig'])
+                                tmp_result['msg'] = idg_mgmt.status_text(idg_mgmt.last_call()["data"]['SaveConfig'])
                                 tmp_result['changed'] = True
                             else:
                                 # Can't saved
@@ -470,30 +425,24 @@ def main():
 
                     # Import
                     # pdb.set_trace()
-                    imp_code, imp_msg, imp_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
-                                                                    data=json.dumps(import_action_msg))
+                    idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(import_action_msg), id="import_domain")
 
-                    if imp_code == 202 and imp_msg == 'Accepted':
+                    if idg_mgmt.is_accepted(idg_mgmt.last_call()):
                         # Asynchronous actions import accepted. Wait for complete
-                        action_result = idg_mgmt.wait_for_action_end(IDGApi.URI_ACTION.format(domain_name), href=imp_data['_links']['location']['href'],
-                                                                     state=state)
+                        idg_mgmt.api_event_sink(IDGApi.URI_ACTION.format(domain_name), href=idg_mgmt.last_call()["data"]['_links']['location']['href'],
+                                                state=state)
 
-                        # Import ready
-                        doim_code, doim_msg, doim_data = idg_mgmt.api_call(imp_data['_links']['location']['href'], method='GET')
-
-                        if doim_code == 200 and doim_msg == 'OK':
+                        if idg_mgmt.is_ok(idg_mgmt.last_call()):
                             # Export completed
-                            import_results = doim_data['result']['Import']['import-results']
+                            import_results = idg_mgmt.last_call()["data"]['result']['Import']['import-results']
                             if import_results['detected-errors'] != 'false':
                                 # Import failed
-                                # pdb.set_trace()
                                 tmp_result['msg'] = 'Import failed with error code: "' + import_results['detected-errors']['error'] + '"'
                                 tmp_result['changed'] = False
                                 tmp_result['failed'] = True
                             else:
                                 # Import success
                                 tmp_result.update({"results": []})  # Update to result
-
                                 tmp_result['results'].append({"export-details": import_results['export-details']})
 
                                 # EXEC-SCRIPT-RESULTS
@@ -562,16 +511,11 @@ def main():
                                 except Exception as e:
                                     pass
 
-                                tmp_result['msg'] = doim_data['status'].capitalize()
+                                tmp_result['msg'] = idg_mgmt.last_call()["data"]['status'].capitalize()
                                 tmp_result['changed'] = True
                         else:
                             # Can't retrieve the import result
                             module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
-
-                    elif imp_code == 200 and imp_msg == 'OK':
-                        # Successfully processed synchronized action
-                        tmp_result['msg'] = idg_mgmt.status_text(imp_data['Import'])
-                        tmp_result['changed'] = True
 
                     else:
                         # Imported not accepted

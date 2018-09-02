@@ -141,13 +141,13 @@ class IDGApi(object):
         self.force_basic_auth = kwargs['force_basic_auth']
         self.http_agent = kwargs['http_agent']
         self.timeout = kwargs['timeout']
-        self.url_username = kwargs['user']
-        self.url_password = kwargs['password']
+        self.user = kwargs['user']
+        self.password = kwargs['password']
         self.use_proxy = kwargs['use_proxy']
         self.validate_certs = kwargs['validate_certs']
 
-        # Calls stack
-        calls=[]
+        # API call queue
+        self.calls=[]
 
     @staticmethod
     def apifilestore_uri2path(uri):
@@ -198,8 +198,8 @@ class IDGApi(object):
                             method=kwargs['method'],
                             headers=self.headers,
                             timeout=self.timeout,
-                            url_username=self.url_username,
-                            url_password=self.url_password,
+                            url_username=self.user,
+                            url_password=self.password,
                             use_proxy=self.use_proxy,
                             force_basic_auth=self.force_basic_auth,
                             validate_certs=self.validate_certs,
@@ -208,7 +208,7 @@ class IDGApi(object):
 
         except HTTPError as e:
             # Get results with code different from 200
-            return int(e.getcode()), e.msg, json.loads(e.read())
+            self.calls.append({"code": int(e.getcode()), "msg": e.msg, "data": json.loads(e.read()), "id": kwargs["id"]})
         except SSLValidationError as e:
             self.ansible_module.fail_json(msg=to_native("Error validating the server's certificate for ({0}). {1}".format(url, str(e))))
         except ConnectionError as e:
@@ -216,47 +216,51 @@ class IDGApi(object):
         except Exception as e:
             self.ansible_module.fail_json(msg=to_native("Unknown error for ({0}). {1}".format(url, str(e))))
         else:
-            calls.append({"code": int(resp.getcode()), "msg": resp.msg, "data": json.loads(resp.read()), "id": kwargs["id"]})
+            self.calls.append({"code": int(resp.getcode()), "msg": resp.msg, "data": json.loads(resp.read()), "id": kwargs["id"]})
 
     def last_call(self):
+        # Direct access to the result of the last API call
         try:
             return self.calls[-1]
         except Exception as e:
             return False
 
     def call_by_id(self, id):
+        # Result of the call tagged with "id"
         for c in self.calls:
             if c["id"] == id:
-                return id
+                return c
         return False
 
     @staticmethod
-    def response_ok(call):
+    def is_ok(call):
+        # The answer corresponds to the successful completion of a synchronous operation
         return (call["code"] == 200 and call["msg"] == 'OK')
 
     @staticmethod
-    def response_created(call):
+    def is_created(call):
+        # The answer corresponds to an action to create
         return (call["code"] == 201 and call["msg"] == 'Created')
 
     @staticmethod
-    def response_accepted(call):
+    def is_accepted(call):
+        # The answer corresponds to an accepted action. This corresponds to asynchronous operations
         return (call["code"] == 202 and call["msg"] == 'Accepted')
 
-    def wait_for_action_end(self, uri, **kwargs):
-
-        str_results = ['processed', 'completed']
-        max_steps = 30
-        count = 0
-        action_result = ''
+    def api_event_sink(self, uri, **kwargs):
+        # Validate and wait for the execution and completion of an asynchronous operation
+        str_results=['processed', 'completed']
+        max_steps=30
+        count=0
+        action_result=''
         resource = uri.rsplit('/', 1)[-1]
-        # pdb.set_trace()
 
         while (action_result.lower() not in str_results) and (count < max_steps):
             # Wait to complete
-            code, msg, data = self.api_call(uri + '/pending', method='GET', data=None)
+            self.api_call(uri + '/pending', method='GET', data=None, id="wait_for_asynchronous_action")
             count += 1
-            if code == 200 and msg == 'OK':
-                action_result = self.get_operation_status(data['operations'], kwargs['href'])
+            if self.is_ok(self.last_call()):
+                action_result = self.get_operation_status(self.last_call()["data"]['operations'], kwargs['href'])
                 if action_result.lower() not in str_results:
                     sleep(self.SHORT_DELAY)
             else:
@@ -267,4 +271,4 @@ class IDGApi(object):
             self.ansible_module.fail_json(msg=to_native((self.ERROR_RETRIEVING_STATUS
                                                          + 'Reached the maximum level of interactions').format(kwargs['state'], resource)))
         else:
-            return action_result.capitalize()
+            self.api_call(kwargs['href'], method='GET', id="get_asynchronous_action_result")
