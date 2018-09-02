@@ -123,7 +123,7 @@ class IDGApi(object):
     URI_FILESTORE = "/mgmt/filestore/{0}"
 
     # Errors strings
-    GENERAL_ERROR = 'Error in module "{0}" when implementing the state "{1}" in the domain "{2}".'
+    GENERAL_ERROR = 'Error in module "{0}" when implementing the state "{1}" for the domain "{2}".'
     GENERAL_STATELESS_ERROR = 'Error in module "{0}" and domain "{1}".'
     ERROR_GET_DOMAIN_LIST = 'Unable to retrieve domain settings'
     ERROR_RETRIEVING_STATUS = 'Retrieving the status of "{0}" over domain "{1}".'
@@ -246,6 +246,11 @@ class IDGApi(object):
     def is_accepted(call):
         # The answer corresponds to an accepted action. This corresponds to asynchronous operations
         return (call["code"] == 202 and call["msg"] == 'Accepted')
+
+    @staticmethod
+    def is_badrequest(call):
+        # The answer corresponds to an Bad Request action for user.
+        return (call["code"] == 400 and call["msg"] == 'Bad Request')
 
     def api_event_sink(self, uri, **kwargs):
         # Validate and wait for the execution and completion of an asynchronous operation

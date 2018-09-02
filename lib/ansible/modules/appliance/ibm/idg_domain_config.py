@@ -155,6 +155,7 @@ name:
   sample:
     - core-security-wrap
     - DevWSOrchestration
+
 msg:
   description:
     - Message returned by the device API.
@@ -163,6 +164,7 @@ msg:
   sample:
     - Configuration was created.
     - Unknown error for (https://idg-host1:5554/mgmt/domains/config/). <open_url error timed out>
+
 results:
   description:
     - Import result detail
