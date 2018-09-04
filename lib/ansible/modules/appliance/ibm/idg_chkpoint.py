@@ -87,7 +87,7 @@ RETURN = '''
 domain:
   description:
     - The name of the domain.
-  returned: changed and success
+  returned: always
   type: string
   sample:
     - core-security-wrap
@@ -96,7 +96,7 @@ domain:
 name:
   description:
     - The name of the checkpoint that is being worked on.
-  returned: changed and success
+  returned: always
   type: string
   sample:
     - checkpoint1

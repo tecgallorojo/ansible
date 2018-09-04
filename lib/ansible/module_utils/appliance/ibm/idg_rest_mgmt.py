@@ -248,7 +248,7 @@ class IDGApi(object):
         return (call["code"] == 202 and call["msg"] == 'Accepted')
 
     @staticmethod
-    def is_badrequest(call):
+    def is_badrequest400(call):
         # The answer corresponds to an Bad Request action for user.
         return (call["code"] == 400 and call["msg"] == 'Bad Request')
 

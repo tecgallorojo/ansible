@@ -224,7 +224,7 @@ RETURN = '''
 name:
   description:
     - The name of the domain that is being worked on.
-  returned: changed and success
+  returned: always
   type: string
   sample:
     - core-security-wrap
