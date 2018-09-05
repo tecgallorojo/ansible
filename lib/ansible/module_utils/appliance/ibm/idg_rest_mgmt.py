@@ -248,9 +248,19 @@ class IDGApi(object):
         return (call["code"] == 202 and call["msg"] == 'Accepted')
 
     @staticmethod
-    def is_badrequest400(call):
+    def is_badrequest(call):
         # The answer corresponds to an Bad Request action for user.
         return (call["code"] == 400 and call["msg"] == 'Bad Request')
+
+    @staticmethod
+    def is_conflict(call):
+        # The answer corresponds to an action that results in a conflict.
+        return (call["code"] == 409 and call["msg"] == 'Conflict')
+
+    @staticmethod
+    def is_notfound(call):
+        # The requested resource was not found.
+        return (call["code"] == 404 and call["msg"] == 'Not Found')
 
     def api_event_sink(self, uri, **kwargs):
         # Validate and wait for the execution and completion of an asynchronous operation
