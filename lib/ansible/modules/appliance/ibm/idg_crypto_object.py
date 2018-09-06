@@ -268,7 +268,7 @@ def main():
 
                     else:  # Can't create the object
                         module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
-                                         ErrorHandler(idg_mgmt.last_call()["data"]['error']))
+                                         str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
                 else:  # Update
                     idg_mgmt.api_call(CRYPTOOBJ_URI_CFG + "/" + object_name, method='GET', id="get_crypto_object")
@@ -288,14 +288,14 @@ def main():
 
                             else:  # Can't read IDG status
                                 module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
-                                                 ErrorHandler(idg_mgmt.last_call()["data"]['error']))
+                                                 str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
                         else:
                             tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
                     else:  # Can't read IDG status
                         module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) +
-                                         ErrorHandler(idg_mgmt.last_call()["data"]['error']))
+                                         str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
             else:  #state == 'absent':
                 if not exist_obj:  # Create it
@@ -310,7 +310,7 @@ def main():
 
                     else:  # Can't remove for update object
                         module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
-                                         ErrorHandler(idg_mgmt.last_call()["data"]['error']))
+                                         str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
         else:  # Can't read domain's lists
             module.fail_json(msg=IDGApi.ERROR_GET_DOMAIN_LIST)

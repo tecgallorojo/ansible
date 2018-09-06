@@ -41,7 +41,8 @@ options:
 
   dest:
     description:
-      - Remote absolute path where the file should be copied to. If I(src) is a directory, this must be a directory too.
+      - Remote absolute path where the file should be copied to.
+      - Always will be treated I(dest) as a directory.
     required: True
 
   recursive:
@@ -114,7 +115,7 @@ import os
 import base64
 from zipfile import ZipFile
 import datetime
-# import pdb
+import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -145,7 +146,7 @@ def create_directory(module, idg_mgmt, home_path, domain_name):
     idg_mgmt.api_call(home_path, method='PUT', data=json.dumps(create_dir_msg), id="create_directory")
 
     if not idg_mgmt.is_created(idg_mgmt.last_call()) and not idg_mgmt.is_conflict(idg_mgmt.last_call()):
-        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, "Upload directory", domain_name) + ErrorHandler(cd_data['error']))
+        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, "Upload directory", domain_name) + str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
     else:
         return True
 
@@ -163,7 +164,7 @@ def do_backup(module, idg_mgmt, uri_file, remote_file, domain_name):
         if idg_mgmt.is_ok(idg_mgmt.last_call()):
             return bak_file
         else:
-            module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, "Creating backup", domain_name) + ErrorHandler(mv_data['error']))
+            module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, "Creating backup", domain_name) + str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
 
 def upload_file(module, idg_mgmt, local_file_path, uri_file, domain_name):
@@ -175,7 +176,7 @@ def upload_file(module, idg_mgmt, local_file_path, uri_file, domain_name):
     idg_mgmt.api_call(uri_file, method='PUT', data=json.dumps(create_file_msg), id="upload_file")
 
     if not idg_mgmt.is_created(idg_mgmt.last_call()) and not idg_mgmt.is_ok(idg_mgmt.last_call()):
-        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, "Upload file", domain_name) + ErrorHandler(cf_data['error']))
+        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, "Upload file", domain_name) + str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
     else:
         return True
 
@@ -240,7 +241,7 @@ def main():
     #
     # Here the action begins
     #
-    # pdb.set_trace()
+    pdb.set_trace()
 
     try:
         remote_home_path = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), _dest_ldir] + _dest_path_list)
@@ -295,35 +296,29 @@ def main():
 
         elif os.path.isfile(src):  # The source is a local file
 
+            file_name = src.split(os.sep)[-1]
+            uri_file = '/'.join([remote_home_path, file_name])  # Update URI for file
+            remote_file = '/'.join([idg_path, file_name])  # Path inside IDG
+
             idg_mgmt.api_call(remote_home_path, method='GET', id="get_remote_path")
 
             if idg_mgmt.is_ok(idg_mgmt.last_call()) or idg_mgmt.is_notfound(idg_mgmt.last_call()):
-                if 'filestore' in idg_mgmt.last_call()["data"].keys():  # Is directory
-                    # If the user is working in only check mode we do not want to make any changes
-                    IDGUtils.implement_check_mode(module)
 
-                    file_name = src.split(os.sep)[-1]
-                    uri_file = '/'.join([remote_home_path, file_name])  # Update URI for file
-                    remote_file = '/'.join([idg_path, file_name])  # Path inside IDG
+                # If the user is working in only check mode we do not want to make any changes
+                IDGUtils.implement_check_mode(module)
 
-                    if backup:  # check backup
-                        tmp_result["backup_file"] = do_backup(module, idg_mgmt, uri_file, remote_file, domain_name)
+                if 'filestore' not in idg_mgmt.last_call()["data"].keys() or idg_mgmt.is_notfound(idg_mgmt.last_call()):  # Is not a directory or not found
+                    create_directory(module, idg_mgmt, remote_home_path, domain_name)
 
-                    upload_file(module, idg_mgmt, src, uri_file, domain_name)
+                if backup:  # check backup
+                    tmp_result["backup_file"] = do_backup(module, idg_mgmt, uri_file, remote_file, domain_name)
 
-                else:
-                    # If the user is working in only check mode we do not want to make any changes
-                    IDGUtils.implement_check_mode(module)
-
-                    if backup:  # check backup
-                        tmp_result["backup_file"] = do_backup(module, idg_mgmt, remote_home_path, idg_path, domain_name)
-
-                    upload_file(module, idg_mgmt, src, remote_home_path, domain_name)
+                upload_file(module, idg_mgmt, src, uri_file, domain_name)  # Upload file
 
             else:
                 # Other Errors
                 module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) +
-                                 ErrorHandler(idg_mgmt.call_by_id("get_remote_path")["data"]['error']))
+                                 str(ErrorHandler(idg_mgmt.call_by_id("get_remote_path")["data"]['error'])))
 
         else:
             module.fail_json(msg='Source "{0}" is not supported.'.format(src))
