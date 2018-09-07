@@ -13,7 +13,7 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 ---
-module: idg_crypto_certificate
+module: idg_crypto_object
 short_description: Manages the public key portion of a private/public key pair, as for RSA or DSA, plus the certificate with which the key pair is used.
 description:
   - Manages the public key portion of a private/public key pair plus the certificate
@@ -162,7 +162,7 @@ except ImportError:
         pass
 
 # Version control
-__MODULE_NAME = "idg_crypto_certificate"
+__MODULE_NAME = "idg_crypto_object"
 __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
@@ -230,13 +230,16 @@ def main():
     if object_class == 'public-key':
         # Create crypto certificate object
         REQ_OBJECT_ID="CryptoCertificate"
-        create_msg = {REQ_OBJECT_ID: {"name": object_name, "mAdminState": admin_state, "Filename": file_name, "IgnoreExpiration": ignore_expiration, "Alias": {"value": password_alias }}}
+        create_msg = {REQ_OBJECT_ID: {"name": object_name, "mAdminState": admin_state, "Filename": file_name, "IgnoreExpiration": ignore_expiration}}
         CRYPTOOBJ_URI_CFG = IDGApi.URI_CONFIG.format(domain_name) + "/" + REQ_OBJECT_ID
     else:
         # Create crypto key object
         REQ_OBJECT_ID="CryptoKey"
-        create_msg = {REQ_OBJECT_ID: {"name": object_name, "mAdminState": admin_state, "Filename": file_name, "Alias": {"value": password_alias }}}
+        create_msg = {REQ_OBJECT_ID: {"name": object_name, "mAdminState": admin_state, "Filename": file_name}}
         CRYPTOOBJ_URI_CFG = IDGApi.URI_CONFIG.format(domain_name) + "/" + REQ_OBJECT_ID
+
+    if password_alias is not None:
+        create_msg[REQ_OBJECT_ID].update({"Alias": {"value": password_alias }})
 
     # Intermediate values ​​for result
     tmp_result = {"name": object_name, "domain": domain_name, "msg": None, "changed": None, "failed": None}
@@ -246,66 +249,68 @@ def main():
     #
     pdb.set_trace()
     try:
-        # List of configured domains
-        chk_code, chk_msg, chk_data = idg_mgmt.api_call(CRYPTOOBJ_URI_CFG, method='GET')
+        # List of configured crypto objects
+        idg_mgmt.api_call(CRYPTOOBJ_URI_CFG, method='GET', id="list_crypto_objets")
 
-        if chk_code == 200 and chk_msg == 'OK':  # If the answer is correct
+        if idg_mgmt.is_ok(idg_mgmt.last_call()):  # If the answer is correct
 
-            if REQ_OBJECT_ID in chk_data.keys():
-                exist_obj = True if object_name in AbstractListDict(chk_data[REQ_OBJECT_ID]).values(key="name") else False
+            if REQ_OBJECT_ID in idg_mgmt.last_call()["data"].keys():
+                exist_obj = True if object_name in AbstractListDict(idg_mgmt.last_call()["data"][REQ_OBJECT_ID]).values(key="name") else False
             else:
                 exist_obj = False
 
             if state == 'present':
                 if not exist_obj:  # Create it
-                    new_code, new_msg, new_data = idg_mgmt.api_call(CRYPTOOBJ_URI_CFG, method='POST',
-                                                                             data=json.dumps(create_msg))
-                    if new_code == 201 and new_msg == 'Created':
-                        tmp_result['msg'] = new_data[object_name]
+                    idg_mgmt.api_call(CRYPTOOBJ_URI_CFG, method='POST', data=json.dumps(create_msg), id="create_crypto_objet")
+                    if idg_mgmt.is_created(idg_mgmt.last_call()):
+                        tmp_result['msg'] = idg_mgmt.last_call()["data"][object_name]
                         tmp_result['changed'] = True
 
-                    else:  # Can't read IDG status
-                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(new_data['error'])))
+                    else:  # Can't create the object
+                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                                         str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
                 else:  # Update
-                    ck_code, ck_msg, ck_data = idg_mgmt.api_call(CRYPTOOBJ_URI_CFG + "/" + object_name, method='GET')
+                    idg_mgmt.api_call(CRYPTOOBJ_URI_CFG + "/" + object_name, method='GET', id="get_crypto_object")
 
-                    if ck_code == 200 and ck_msg == 'OK':
+                    if idg_mgmt.is_ok(idg_mgmt.last_call()):
 
-                        del ck_data[REQ_OBJECT_ID]['PasswordAlias']
-                        if "Alias" in ck_data[REQ_OBJECT_ID].keys():
-                            del ck_data[REQ_OBJECT_ID]['Alias']['href']
+                        del idg_mgmt.last_call()["data"][REQ_OBJECT_ID]['PasswordAlias']
+                        if "Alias" in idg_mgmt.last_call()["data"][REQ_OBJECT_ID].keys():
+                            del idg_mgmt.last_call()["data"][REQ_OBJECT_ID]['Alias']['href']
 
-                        if ck_data[REQ_OBJECT_ID] != create_msg[REQ_OBJECT_ID]:
-                            upd_code, upd_msg, upd_data = idg_mgmt.api_call(CRYPTOOBJ_URI_CFG + "/" + object_name, method='PUT',
-                                                                                     data=json.dumps(create_msg))
-                            if upd_code == 200 and upd_msg == 'OK':
-                                tmp_result['msg'] = upd_data[object_name]
+                        if idg_mgmt.last_call()["data"][REQ_OBJECT_ID] != create_msg[REQ_OBJECT_ID]:
+                            idg_mgmt.api_call(CRYPTOOBJ_URI_CFG + "/" + object_name, method='PUT', data=json.dumps(create_msg), id="update_crypto_object")
+
+                            if idg_mgmt.is_ok(idg_mgmt.last_call()):
+                                tmp_result['msg'] = idg_mgmt.last_call()["data"][object_name]
                                 tmp_result['changed'] = True
 
                             else:  # Can't read IDG status
-                                module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name)
-                                                 + str(ErrorHandler(upd_data['error'])))
+                                module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                                                 str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
                         else:
                             tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
                     else:  # Can't read IDG status
-                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(ck_data['error'])))
+                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) +
+                                         str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
             else:  #state == 'absent':
                 if not exist_obj:  # Create it
                     tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
                 else:
-                    del_code, del_msg, del_data = idg_mgmt.api_call(CRYPTOOBJ_URI_CFG + "/" + object_name, method='DELETE')
+                    idg_mgmt.api_call(CRYPTOOBJ_URI_CFG + "/" + object_name, method='DELETE', id="delete_crypto_object")
 
-                    if del_code == 200 and del_msg == 'OK':
-                        tmp_result['msg'] = del_data[object_name]
+                    if idg_mgmt.is_ok(idg_mgmt.last_call()):
+                        tmp_result['msg'] = idg_mgmt.last_call()["data"][object_name]
                         tmp_result['changed'] = True
 
                     else:  # Can't remove for update object
-                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(del_data['error'])))
+                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                                         str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
         else:  # Can't read domain's lists
             module.fail_json(msg=IDGApi.ERROR_GET_DOMAIN_LIST)

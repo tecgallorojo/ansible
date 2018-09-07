@@ -14,10 +14,10 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 DOCUMENTATION = '''
 ---
 
-module: idg_domain_fetch
+module: idg_fetch
 short_description: Copies files from remote IDGs
 description:
-  - The M(idg_domain_fetch) module download files from remote IDGs to the local box.
+  - The M(idg_fetch) module download files from remote IDGs to the local box.
   - Use M(idg_domain_copy) to upload a file from local to a location on the remote IDG.
 version_added: "2.7"
 options:
@@ -61,7 +61,7 @@ EXAMPLES = '''
   tasks:
 
   - name: Upload transform
-    idg_domain_fetch:
+    idg_fetch:
         idg_connection: "{{ remote_idg }}"
         domain: dev
         path: "local:/XMLs/ErrorCodes.xml"
@@ -75,6 +75,15 @@ msg:
   type: string
   sample:
     - Completed.
+
+domain:
+  description:
+    - The name of the domain.
+  returned: always
+  type: string
+  sample:
+    - core-security-wrap
+    - DevWSOrchestration
 
 file:
   description:
@@ -123,7 +132,7 @@ except ImportError:
         pass
 
 # Version control
-__MODULE_NAME = "idg_domain_fetch"
+__MODULE_NAME = "idg_fetch"
 __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
@@ -177,7 +186,7 @@ def main():
     export_action_msg = {"Export": {"Format": "ZIP", "AllFiles": "on", "Persisted": "off", "IncludeInternalFiles": "off", "Object": []}}
 
     # Intermediate values ​​for result
-    tmp_result = {"msg": IDGUtils.COMPLETED_MESSAGE, "directory": None, "files": None}
+    tmp_result = {"msg": IDGUtils.COMPLETED_MESSAGE, "domain": domain_name, "directory": None, "files": None}
 
     #
     # Here the action begins
@@ -187,11 +196,11 @@ def main():
         if _pldir + ':' in IDGUtils.IDG_DIRS:  # Base IDG directory is OK
 
             api_uri = '/'.join([IDGApi.URI_FILESTORE.format(domain_name), _pldir] + _ppath_list)  # Path prefix
-            ck_code, ck_msg, ck_data = idg_mgmt.api_call(api_uri, method='GET')
+            idg_mgmt.api_call(api_uri, method='GET', id="get_remote_target")
 
-            if ck_code == 200 and ck_msg == 'OK':
+            if idg_mgmt.is_ok(idg_mgmt.last_call()):
 
-                if 'filestore' in ck_data.keys():  # Is directory
+                if 'filestore' in idg_mgmt.last_call()["data"].keys():  # Is directory
 
                     if recursive:  # recursively download the entire directory
 
@@ -202,23 +211,20 @@ def main():
 
                         try:
                             state = "Download remote directory"
-                            exp_code, exp_msg, exp_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST',
-                                                                            data=json.dumps(export_action_msg))
+                            idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(export_action_msg), id="export_domain")
 
-                            if exp_code == 202 and exp_msg == 'Accepted':
+                            if idg_mgmt.is_accepted(idg_mgmt.last_call()):
                                 # Asynchronous actions export accepted. Wait for complete
-                                dummy = idg_mgmt.wait_for_action_end(IDGApi.URI_ACTION.format(domain_name), href=exp_data['_links']['location']['href'],
-                                                                     state=state)
-                                # Export completed. Get result
-                                doex_code, doex_msg, doex_data = idg_mgmt.api_call(exp_data['_links']['location']['href'], method='GET')
+                                idg_mgmt.api_event_sink(IDGApi.URI_ACTION.format(domain_name), href=idg_mgmt.last_call()["data"]['_links']['location']['href'],
+                                                        state=state)
 
-                                if doex_code == 200 and doex_msg == 'OK':
+                                if idg_mgmt.is_ok(idg_mgmt.last_call()):
                                     # Export ok
                                     try:
                                         # Unzip backup in temporary directory
                                         backup_file = os.sep.join([tmp_dir, domain_name + ".zip"])
                                         with open(backup_file, 'wb') as f:
-                                            f.write(base64.b64decode(doex_data['result']['file']))
+                                            f.write(base64.b64decode(idg_mgmt.last_call()["data"]['result']['file']))
 
                                         ziparch = ZipFile(backup_file)
                                         ziparch.extractall(tmp_dir)
@@ -242,7 +248,7 @@ def main():
                                         tmp_result['directory'] = encoded_file
 
                                     except Exception as e:
-                                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name))
+                                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(e))
 
                                 else:
                                     # Can't retrieve the export
@@ -261,18 +267,18 @@ def main():
                         # If the user is working in only check mode we do not want to make any changes
                         IDGUtils.implement_check_mode(module)
 
-                        if 'file' in ck_data['filestore']['location'].keys():
+                        if 'file' in idg_mgmt.call_by_id("get_remote_target")["data"]['filestore']['location'].keys():
 
-                            files_names = [i for i in AbstractListDict(ck_data['filestore']['location']['file']).values(key='name')]
+                            files_names = [i for i in AbstractListDict(idg_mgmt.call_by_id("get_remote_target")["data"]['filestore']['location']['file']).values(key='name')]
                             files = []
                             for f in files_names:
 
-                                dw_code, dw_msg, dw_data = idg_mgmt.api_call(api_uri + '/' + f, method='GET')
-                                if dw_code == 200 and dw_msg == 'OK':
-                                    files.append({"name": f, "file": dw_data['file']})
+                                idg_mgmt.api_call(api_uri + '/' + f, method='GET', id="download_files")
+                                if idg_mgmt.is_ok(idg_mgmt.last_call()):
+                                    files.append({"name": f, "file": idg_mgmt.last_call()["data"]['file']})
                                 else:
                                     module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name)
-                                                     + str(ErrorHandler(dw_data['error'])))
+                                                     + str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
                             tmp_result['files'] = files
 
@@ -284,7 +290,7 @@ def main():
                     # If the user is working in only check mode we do not want to make any changes
                     IDGUtils.implement_check_mode(module)
 
-                    tmp_result['files'] = [{"name": _ppath_list[-1], "file": ck_data['file']}]
+                    tmp_result['files'] = [{"name": _ppath_list[-1], "file": idg_mgmt.call_by_id("get_remote_target")["data"]['file']}]
 
             elif ck_code == 404 and ck_msg == 'Not Found':
                 # Source not found
@@ -292,7 +298,8 @@ def main():
 
             else:
                 # Other Errors
-                module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(ck_data['error'])))
+                module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) +
+                                 str(ErrorHandler(idg_mgmt.call_by_id("get_remote_target")["data"]['error'])))
 
         #
         # Finish

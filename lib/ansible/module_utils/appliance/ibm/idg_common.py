@@ -17,7 +17,7 @@ result = dict(
     failed=False,
     changed=False,
     name='default',
-    msg='the best is coming'
+    msg='The best is coming'
 )
 
 # Socket information
@@ -26,9 +26,13 @@ idg_endpoint_spec.update(
     timeout=dict(type='int', default=10),  # The socket level timeout in seconds
     server=dict(type='str', required=True),  # Remote IDG will be used.
     server_port=dict(type='int', default=5554),  # Remote IDG port be used.
-    url_username=dict(required=False, aliases=['user']),
-    url_password=dict(required=False, aliases=['password'], no_log=True),
+    # Credentials
+    user=dict(type='str', required=True),
+    password=dict(type='str', required=True, no_log=True)
 )
+
+del idg_endpoint_spec["url_username"]
+del idg_endpoint_spec["url_password"]
 
 
 # Custom exception
@@ -97,3 +101,11 @@ class IDGUtils(object):
     def bool_on_off(arg):
         # Translate "on", "off" to boolean
         return True if arg.lower() == "on" else False
+
+    @staticmethod
+    def domains_list(domain_resp):
+        # List of existing domains
+        if isinstance(domain_resp, dict):  # if has only default domain
+            return [domain_resp['name']]
+        else:
+            return [d['name'] for d in domain_resp]
