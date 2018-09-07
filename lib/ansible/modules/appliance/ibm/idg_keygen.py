@@ -416,10 +416,10 @@ def main():
     pdb.set_trace()
     try:
 
-        code, msg, data = idg_mgmt.api_call(URI_KEYGEN, method='POST', data=json.dumps(create_msg))
+        idg_mgmt.api_call(URI_KEYGEN, method='POST', data=json.dumps(create_msg), id="keygen_call")
 
-        if code == 200 and msg == 'OK':  # If the answer is correct
-            tmp_result['msg'] = data['Keygen']
+        if idg_mgmt.is_ok(idg_mgmt.last_call()):  # If the answer is correct
+            tmp_result['msg'] = idg_mgmt.last_call()["data"]['Keygen']
             tmp_result['changed'] = True
 
             # Directories
@@ -440,7 +440,8 @@ def main():
                 tmp_result['csr-file'] = TMP_DIR + create_msg["Keygen"]["CN"] + '.' + CSR_EXT
 
         else:  # Wrong request
-            module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) + str(ErrorHandler(data['error'])))
+            module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name) +
+                             str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
         #
         # Finish

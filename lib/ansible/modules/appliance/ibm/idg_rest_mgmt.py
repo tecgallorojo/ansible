@@ -188,8 +188,11 @@ def main():
 
     try:
         # Do request
-        result['http_code'], result['http_phrase'], result['payload'] = idg_mgmt.api_call(module.params['uri'], method=module.params['method'],
-                                                                                          data=payload)
+        idg_mgmt.api_call(module.params['uri'], method=module.params['method'], data=payload, id="rest_management_call")
+
+        result['http_code'] = idg_mgmt.last_call()["code"]
+        result['http_phrase'] = idg_mgmt.last_call()["msg"]
+        result['payload'] = idg_mgmt.last_call()["data"]
 
         #
         # Finish

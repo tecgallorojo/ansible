@@ -81,7 +81,7 @@ status:
 '''
 
 import json
-# import pdb
+import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -209,7 +209,7 @@ def main():
     #
     # Here the action begins
     #
-    # pdb.set_trace()
+    pdb.set_trace()
 
     try:
         # Do request
@@ -226,16 +226,16 @@ def main():
 
                         resource = s1['href'].rsplit('/', 1)[-1]
 
-                        code, phrase, payload = idg_mgmt.api_call(s1['href'], method='GET', data=None)
+                        idg_mgmt.api_call(s1['href'], method='GET', id="get_appliance_status")
 
-                        if code == 200 and phrase == 'OK':
-                            del(payload['_links'])
+                        if idg_mgmt.is_ok(idg_mgmt.last_call()):
+                            del(idg_mgmt.last_call()["data"]['_links'])
 
-                            if 'result' in payload.keys() and payload['result'] == "No status retrieved.":
-                                payload.update({resource: payload['result']})
-                                del(payload['result'])
+                            if 'result' in idg_mgmt.last_call()["data"].keys() and idg_mgmt.last_call()["data"]['result'] == "No status retrieved.":
+                                idg_mgmt.last_call()["data"].update({resource: idg_mgmt.last_call()["data"]['result']})
+                                del(idg_mgmt.last_call()["data"]['result'])
 
-                            pl.append(payload)
+                            pl.append(idg_mgmt.last_call()["data"])
                         else:  # Can't retrieve the status
                             module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(resource, _DOMAIN))
 
