@@ -56,6 +56,9 @@ class AbstractListDict(object):
         f = [d for d in self.values(key=kwargs['key']) if re.match(kwargs['pattern'], d, kwargs['flags'])]
         return f
 
+    def empty(self):
+        return (self.data == [] or self.data == [{}])
+
 
 class AbstractListStr(object):
     """
@@ -88,6 +91,9 @@ class AbstractListStr(object):
 
     def values(self):
         return self.data
+
+    def empty(self):
+        return self.data == []
 
 
 class ErrorHandler(AbstractListStr):

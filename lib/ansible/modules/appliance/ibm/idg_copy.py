@@ -14,7 +14,7 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 DOCUMENTATION = '''
 ---
 
-module: idg_domain_copy
+module: idg_copy
 short_description: Copies files to remote IDGs
 description:
   - The idg_domain_copy module upload a file from the local or remote IDG to a location on the remote IDG.
@@ -73,7 +73,7 @@ EXAMPLES = '''
   tasks:
 
   - name: Upload transform
-    idg_domain_copy:
+    idg_copy:
         idg_connection: "{{ remote_idg }}"
         domain: dev
         src: /home/developer/xsls/transform.xsl
@@ -136,7 +136,7 @@ except ImportError:
         pass
 
 # Version control
-__MODULE_NAME = "idg_domain_copy"
+__MODULE_NAME = "idg_copy"
 __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 

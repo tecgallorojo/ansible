@@ -13,7 +13,7 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 ---
-module: idg_crypto_certificate
+module: idg_crypto_object
 short_description: Manages the public key portion of a private/public key pair, as for RSA or DSA, plus the certificate with which the key pair is used.
 description:
   - Manages the public key portion of a private/public key pair plus the certificate
@@ -162,7 +162,7 @@ except ImportError:
         pass
 
 # Version control
-__MODULE_NAME = "idg_crypto_certificate"
+__MODULE_NAME = "idg_crypto_object"
 __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 

@@ -14,10 +14,10 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 DOCUMENTATION = '''
 ---
 
-module: idg_domain_fetch
+module: idg_fetch
 short_description: Copies files from remote IDGs
 description:
-  - The M(idg_domain_fetch) module download files from remote IDGs to the local box.
+  - The M(idg_fetch) module download files from remote IDGs to the local box.
   - Use M(idg_domain_copy) to upload a file from local to a location on the remote IDG.
 version_added: "2.7"
 options:
@@ -61,7 +61,7 @@ EXAMPLES = '''
   tasks:
 
   - name: Upload transform
-    idg_domain_fetch:
+    idg_fetch:
         idg_connection: "{{ remote_idg }}"
         domain: dev
         path: "local:/XMLs/ErrorCodes.xml"
@@ -132,7 +132,7 @@ except ImportError:
         pass
 
 # Version control
-__MODULE_NAME = "idg_domain_fetch"
+__MODULE_NAME = "idg_fetch"
 __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 

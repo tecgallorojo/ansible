@@ -114,6 +114,15 @@ msg:
   sample:
     - Directory was created.
 
+domain:
+  description:
+    - The name of the domain.
+  returned: always
+  type: string
+  sample:
+    - core-security-wrap
+    - DevWSOrchestration
+
 path:
   description:
     - Path to the file or directory managed
@@ -136,7 +145,7 @@ output:
 '''
 
 import json
-# import pdb
+import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -157,7 +166,7 @@ except ImportError:
         pass
 
 # Version control
-__MODULE_NAME = "idg_domain_file"
+__MODULE_NAME = "idg_file"
 __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
@@ -207,12 +216,12 @@ def main():
                       force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
     # Intermediate values ​​for result
-    tmp_result = {"msg": None, "path": None, "changed": None, "output": None}
+    tmp_result = {"domain": domain_name, "msg": None, "path": None, "changed": None, "output": None}
 
     #
     # Here the action begins
     #
-    # pdb.set_trace()
+    pdb.set_trace()
 
     try:
         # Do request
@@ -226,15 +235,15 @@ def main():
             # Create directory recursively
             for d in path_as_list:
 
-                ck_code, ck_msg, ck_data = idg_mgmt.api_call(td, method='GET')
+                idg_mgmt.api_call(td, method='GET', id="get_remote_directory")
 
-                if ck_code == 200 and ck_msg == 'OK':
+                if idg_mgmt.is_ok(idg_mgmt.last_call()):
 
                     td = '/'.join([td, d])
                     tmp_result['path'] = idg_mgmt.apifilestore_uri2path(td)
 
-                    if 'directory' in ck_data['filestore']['location'].keys():
-                        filestore_abst = AbstractListDict(ck_data['filestore']['location']['directory'])  # Get directories
+                    if 'directory' in idg_mgmt.last_call()["data"]['filestore']['location'].keys():
+                        filestore_abst = AbstractListDict(idg_mgmt.last_call()["data"]['filestore']['location']['directory'])  # Get directories
                     else:
                         filestore_abst = AbstractListDict({})  # Not contain directories
 
@@ -246,16 +255,18 @@ def main():
                         IDGUtils.implement_check_mode(module)
 
                         create_dir_msg = {"directory": {"name": d}}
-                        cr_code, cr_msg, cr_data = idg_mgmt.api_call(td, method='PUT', data=json.dumps(create_dir_msg))
+                        idg_mgmt.api_call(td, method='PUT', data=json.dumps(create_dir_msg), id="create_directory")
 
-                        if cr_code == 201 and cr_msg == 'Created':
-                            tmp_result['msg'] = cr_data['result']
+                        if idg_mgmt.is_created(idg_mgmt.last_call()):
+                            tmp_result['msg'] = idg_mgmt.last_call()["data"]['result']
                             tmp_result['changed'] = True
                         else:
-                            module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(cr_data['error'])))
+                            module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                                             str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
                 else:
-                    module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(ck_data['error'])))
+                    module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) +
+                                     str(ErrorHandler(idg_mgmt.call_by_id("get_remote_directory")["data"]['error'])))
 
         elif state == 'move':  # Move remote files
 
@@ -266,12 +277,14 @@ def main():
                              "Overwrite": IDGUtils.str_on_off(module.params['overwrite'])}}
             tmp_result['path'] = move_file_msg['MoveFile']['dURL']
 
-            mv_code, mv_msg, mv_data = idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(move_file_msg))
+            idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(move_file_msg), id="move_file")
 
-            if mv_code == 200 and mv_msg == 'OK':
+            if idg_mgmt.is_ok(idg_mgmt.last_call()):
+                tmp_result['msg'] = idg_mgmt.last_call()["data"]['MoveFile']
                 tmp_result['changed'] = True
             else:
-                module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(mv_data['error'])))
+                module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                                 str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
         elif state == 'show':  # Show details of file or content of directories
 
@@ -279,33 +292,35 @@ def main():
             IDGUtils.implement_check_mode(module)
 
             list_target = '/'.join([td] + path_as_list)
-            sh_code, sh_msg, sh_data = idg_mgmt.api_call(list_target, method='GET')
+            idg_mgmt.api_call(list_target, method='GET', id="get_remote_target")
 
-            if sh_code == 200 and sh_msg == 'OK':
+            if idg_mgmt.is_ok(idg_mgmt.last_call()):
                 output = {}
-                if 'filestore' in sh_data.keys():  # is directory
+                if 'filestore' in idg_mgmt.last_call()["data"].keys():  # is directory
 
-                    if 'directory' in sh_data['filestore']['location'].keys():
-                        output['directory'] = [{"name": i["name"]} for i in AbstractListDict(sh_data['filestore']['location']['directory']).raw_data()]
+                    if 'directory' in idg_mgmt.last_call()["data"]['filestore']['location'].keys():
+                        output['directory'] = [{"name": i["name"]} for i in AbstractListDict(idg_mgmt.last_call()["data"]['filestore']['location']['directory']).raw_data()]
 
-                    if 'file' in sh_data['filestore']['location'].keys():
+                    if 'file' in idg_mgmt.last_call()["data"]['filestore']['location'].keys():
                         output['file'] = [{"name": i["name"], "size": i["size"], "modified": i["modified"]}
-                                          for i in AbstractListDict(sh_data['filestore']['location']['file']).raw_data()]
+                                          for i in AbstractListDict(idg_mgmt.last_call()["data"]['filestore']['location']['file']).raw_data()]
                 else:
-                    fi_code, fi_msg, fi_data = idg_mgmt.api_call('/'.join([td] + path_as_list[:-1]), method='GET')
+                    idg_mgmt.api_call('/'.join([td] + path_as_list[:-1]), method='GET', id="get_file_detail")
 
-                    if fi_code == 200 and fi_msg == 'OK':
+                    if idg_mgmt.is_ok(idg_mgmt.last_call()):
                         output = [{"name": i["name"], "size": i["size"], "modified": i["modified"]}
-                                  for i in fi_data['filestore']['location']['file'] if i['name'] == path_as_list[-1]]
+                                  for i in idg_mgmt.last_call()["data"]['filestore']['location']['file'] if i['name'] == path_as_list[-1]]
                     else:
-                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(fi_data['error'])))
+                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                                         str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
                 tmp_result['msg'] = IDGUtils.COMPLETED_MESSAGE
                 tmp_result['path'] = idg_mgmt.apifilestore_uri2path(list_target)
                 tmp_result['output'] = output
 
             else:
-                module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(sh_data['error'])))
+                module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) +
+                                 str(ErrorHandler(idg_mgmt.call_by_id("get_remote_target")["data"]['error'])))
 
         else:  # Remove
             # Remove directory recursively
@@ -314,18 +329,19 @@ def main():
             IDGUtils.implement_check_mode(module)
 
             td = '/'.join([td] + path_as_list)
-            rm_code, rm_msg, rm_data = idg_mgmt.api_call(td, method='DELETE')
+            idg_mgmt.api_call(td, method='DELETE', id="remove_remote_target")
             tmp_result['path'] = idg_mgmt.apifilestore_uri2path(td)
 
-            if rm_code == 200 and rm_msg == 'OK':
-                tmp_result['msg'] = rm_data['result']
+            if idg_mgmt.is_ok(idg_mgmt.last_call()):
+                tmp_result['msg'] = idg_mgmt.last_call()["data"]['result']
                 tmp_result['changed'] = True
 
-            elif rm_code == 404 and rm_msg == 'Not Found':
+            elif idg_mgmt.is_notfound(idg_mgmt.last_call()):
                 tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
             else:
-                module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(rm_data['error'])))
+                module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                                 str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
         #
         # Finish

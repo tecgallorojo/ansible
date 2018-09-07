@@ -13,7 +13,7 @@ ANSIBLE_METADATA = {'metadata_version': '1.1',
 
 DOCUMENTATION = '''
 ---
-module: idg_domain_password_alias
+module: idg_password_alias
 short_description: Manage the mapping of aliases to passwords.
 description:
   - Manage the mapping of aliases to passwords.
@@ -80,7 +80,7 @@ EXAMPLES = '''
   tasks:
 
   - name: Create or update password alias map
-    idg_domain_password_alias:
+    idg_password_alias:
         name: "{{ passw_alias_name }}"
         password: Passw0rd
         summary: PAssword for Portal
@@ -91,7 +91,7 @@ EXAMPLES = '''
   # Remove
 
   - name: Remove password alias map
-    idg_domain_password_alias:
+    idg_password_alias:
         name: "{{ chkpoint_name }}"
         domain: "{{ domain_name }}"
         idg_connection: "{{ remote_idg }}"
@@ -102,7 +102,7 @@ RETURN = '''
 domain:
   description:
     - The name of the domain.
-  returned: changed and success
+  returned: always
   type: string
   sample:
     - core-security-wrap
@@ -111,7 +111,7 @@ domain:
 name:
   description:
     - The name of the password map alias.
-  returned: changed and success
+  returned: always
   type: string
   sample:
     - password-ssl-portal
@@ -126,7 +126,7 @@ msg:
 '''
 
 import json
-# import pdb
+import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -146,7 +146,7 @@ except ImportError:
         pass
 
 # Version control
-__MODULE_NAME = "idg_domain_password_alias"
+__MODULE_NAME = "idg_password_alias"
 __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
@@ -217,16 +217,16 @@ def main():
     # Here the action begins
     #
 
-    # pdb.set_trace()
+    pdb.set_trace()
     try:
 
         # List of configured password alias in domain
-        chk_code, chk_msg, chk_data = idg_mgmt.api_call(URI_PAM_CONFIG, method='GET')
+        idg_mgmt.api_call(URI_PAM_CONFIG, method='GET', id="get_configured_password_alias")
 
-        if chk_code == 200 and chk_msg == 'OK':  # If the answer is correct
+        if idg_mgmt.is_ok(idg_mgmt.last_call()):  # If the answer is correct
 
-            if 'PasswordAlias' in chk_data.keys():
-                pams = AbstractListDict(chk_data['PasswordAlias'])
+            if 'PasswordAlias' in idg_mgmt.last_call()["data"].keys():
+                pams = AbstractListDict(idg_mgmt.last_call()["data"]['PasswordAlias'])
             else:
                 pams = AbstractListDict({})
 
@@ -235,28 +235,30 @@ def main():
                 # If the user is working in only check mode we do not want to make any changes
                 IDGUtils.implement_check_mode(module)
 
-                if pam_name not in pams.values(key='name'):  # Create
+                if pams.empty() or (pam_name not in pams.values(key='name')):  # Create
 
-                    create_code, create_msg, create_data = idg_mgmt.api_call(URI_PAM_CONFIG, method='POST', data=json.dumps(create_msg))
+                    idg_mgmt.api_call(URI_PAM_CONFIG, method='POST', data=json.dumps(create_msg), id="create_password_alias")
 
-                    if create_code == 201 and create_msg == 'Created':
+                    if idg_mgmt.is_created(idg_mgmt.last_call()):
                         # Create successfully
-                        tmp_result['msg'] = create_data[pam_name]
+                        tmp_result['msg'] = idg_mgmt.last_call()["data"][pam_name]
                         tmp_result['changed'] = True
 
                     else:
-                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(create_data['error'])))
+                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                                         str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
                 else:  # Update
-                    upd_code, upd_msg, upd_data = idg_mgmt.api_call(URI_PAM_CONFIG + '/' + pam_name, method='PUT', data=json.dumps(create_msg))
+                    idg_mgmt.api_call(URI_PAM_CONFIG + '/' + pam_name, method='PUT', data=json.dumps(create_msg), id="update_password_alias")
 
-                    if upd_code == 200 and upd_msg == 'OK':
+                    if idg_mgmt.is_ok(idg_mgmt.last_call()):
                         # Update successfully
-                        tmp_result['msg'] = upd_data[pam_name]
+                        tmp_result['msg'] = idg_mgmt.last_call()["data"][pam_name]
                         tmp_result['changed'] = True
 
                     else:
-                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(upd_data['error'])))
+                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                                         str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
             elif state == 'absent':
 
@@ -265,21 +267,23 @@ def main():
 
                 if pam_name in pams.values(key='name'):
 
-                    rem_code, rem_msg, rem_data = idg_mgmt.api_call(URI_PAM_CONFIG + '/' + pam_name, method='DELETE')
+                    idg_mgmt.api_call(URI_PAM_CONFIG + '/' + pam_name, method='DELETE', id="delete_password_alias")
 
-                    if rem_code == 200 and rem_msg == 'OK':
+                    if idg_mgmt.is_ok(idg_mgmt.last_call()):
                         # Update successfully
-                        tmp_result['msg'] = rem_data[pam_name]
+                        tmp_result['msg'] = idg_mgmt.last_call()["data"][pam_name]
                         tmp_result['changed'] = True
 
                     else:
-                        module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(rem_data['error'])))
+                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                                         str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
                 else:
                     tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
         else:  # Can't read password alias status
-            module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) + str(ErrorHandler(chk_data['error'])))
+            module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) +
+                             str(ErrorHandler(idg_mgmt.call_by_id("get_configured_password_alias")["data"]['error'])))
 
         #
         # Finish
