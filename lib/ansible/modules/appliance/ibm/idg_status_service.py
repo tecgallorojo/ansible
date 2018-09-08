@@ -17,7 +17,7 @@ module: idg_status_service
 short_description: Lists local services
 description:
   - Lists all local services that are listening for incoming connections.
-version_added: "2.7"
+version_added: "2.8"
 options:
 
   filter:

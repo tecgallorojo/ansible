@@ -19,7 +19,7 @@ short_description: Copies files to remote IDGs
 description:
   - The idg_domain_copy module upload a file from the local or remote IDG to a location on the remote IDG.
   - Use the idg_domain_fetch module to download files from remote IDGs to the local box.
-version_added: "2.7"
+version_added: "2.8"
 options:
 
   domain:

@@ -18,7 +18,7 @@ short_description: Generates a public-private key pair and a certificate signing
 description:
   - Generates a public-private key pair and a certificate signing request (CSR) files in a specific domain.
   - The parameters I(hsm), I(hsm_name) are available on only an HSM-equipped DataPower Gateway.
-version_added: "2.7"
+version_added: "2.8"
 options:
 
   certificate_data:

@@ -19,7 +19,7 @@ short_description: Copies files from remote IDGs
 description:
   - The M(idg_fetch) module download files from remote IDGs to the local box.
   - Use M(idg_domain_copy) to upload a file from local to a location on the remote IDG.
-version_added: "2.7"
+version_added: "2.8"
 options:
 
   domain:

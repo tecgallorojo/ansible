@@ -17,7 +17,7 @@ module: idg_rest_mgmt
 short_description: Generic and simple module to use the REST management interface
 description:
   - Generic and simple module to use the REST management interfac of the IBM DataPower Gateway(IDG).
-version_added: "2.7"
+version_added: "2.8"
 options:
 
   method:

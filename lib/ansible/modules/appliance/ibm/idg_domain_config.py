@@ -17,7 +17,7 @@ module: idg_domain_config
 short_description: Manages IBM DataPower Gateway(IDG) domains configurations actions.
 description:
   - Manages IBM DataPower Gateway(IDG) domains configurations actions.
-version_added: "2.7"
+version_added: "2.8"
 options:
   name:
     description:

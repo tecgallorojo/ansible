@@ -17,7 +17,7 @@ module: idg_password_alias
 short_description: Manage the mapping of aliases to passwords.
 description:
   - Manage the mapping of aliases to passwords.
-version_added: "2.7"
+version_added: "2.8"
 options:
 
   name:

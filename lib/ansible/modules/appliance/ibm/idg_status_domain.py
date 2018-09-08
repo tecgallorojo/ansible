@@ -17,7 +17,7 @@ module: idg_status_domain
 short_description: List of domains and their configurations
 description:
   - List of domains present in the IBM DataPower Gateway(IDG) and their configurations.
-version_added: "2.7"
+version_added: "2.8"
 options:
 
   filter:

@@ -17,7 +17,7 @@ module: idg_crypto_object
 short_description: Manages the public key portion of a private/public key pair, as for RSA or DSA, plus the certificate with which the key pair is used.
 description:
   - Manages the public key portion of a private/public key pair plus the certificate
-version_added: "2.7"
+version_added: "2.8"
 options:
 
   name:

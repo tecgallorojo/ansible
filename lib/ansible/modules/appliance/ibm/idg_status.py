@@ -17,7 +17,7 @@ module: idg_status
 short_description: Status of the most important parameters of the device
 description:
   - Status of the most important parameters of the device.
-version_added: "2.7"
+version_added: "2.8"
 options:
 
   parameters:

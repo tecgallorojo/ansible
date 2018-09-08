@@ -17,7 +17,7 @@ module: idg_domain
 short_description: Manages IBM DataPower Gateway(IDG) domains
 description:
   - Manages IBM DataPower Gateway(IDG) domains.
-version_added: "2.7"
+version_added: "2.8"
 options:
 
   name:

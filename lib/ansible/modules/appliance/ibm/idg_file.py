@@ -18,7 +18,7 @@ module: idg_domain_file
 short_description: Module for managing directories and files
 description:
   - Module for managing directories and files
-version_added: "2.7"
+version_added: "2.8"
 options:
 
   domain:

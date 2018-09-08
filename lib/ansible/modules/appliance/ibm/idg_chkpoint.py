@@ -17,7 +17,7 @@ module: idg_chkpoint
 short_description: Manages IBM DataPower Gateway(IDG) domains configuration checkpoints.
 description:
   - Manages IBM DataPower Gateway(IDG) domains configuration checkpoints.
-version_added: "2.7"
+version_added: "2.8"
 options:
 
   name:
