@@ -79,7 +79,7 @@ author:
 '''
 
 EXAMPLES = '''
-- name: Test DataPower crypto_certificate module
+- name: Test DataPower crypto_object module
   connection: local
   hosts: localhost
   vars:
