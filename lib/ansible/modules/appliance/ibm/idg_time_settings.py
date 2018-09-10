@@ -41,9 +41,9 @@ options:
         - KRT-5
         - IST-5:30
         - NOVST-6NOVDT
-        - CST-8 > CST
-        - WST-8 > WST
-        - JST-9 > JST
+        - CST-8
+        - WST-8
+        - JST-9
         - CST-9:30CDT
         - EST-10EDT
         - EST-10
@@ -105,12 +105,12 @@ from ansible.module_utils._text import to_native
 HAS_IDG_DEPS = False
 try:
     from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils
-    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, ErrorHandler, AbstractListDict
+    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, ErrorHandler
     HAS_IDG_DEPS = True
 except ImportError:
     try:
         from library.module_utils.idg_common import result, idg_endpoint_spec, IDGUtils
-        from library.module_utils.idg_rest_mgmt import IDGApi, ErrorHandler, AbstractListDict
+        from library.module_utils.idg_rest_mgmt import IDGApi, ErrorHandler
         HAS_IDG_DEPS = True
     except ImportError:
         pass
@@ -184,11 +184,12 @@ def main():
 
     try:
         # Get time settings
-        idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/TimeSettings", method='GET', id="get_time_settings")
+        idg_mgmt.api_call(IDGApi.URI_STATUS.format(domain_name) + "/DateTimeStatus", method='GET', id="get_datetime_status")
 
         if idg_mgmt.is_ok(idg_mgmt.last_call()):  # If the answer is correct
+            configured_timezone = idg_mgmt.last_call()["data"]["DateTimeStatus"]["tzspec"].split(',')[0]
 
-            if (idg_mgmt.last_call()["data"]["TimeSettings"]["LocalTimeZone"] != time_zone) and (time_zone is not None):  # Need change de time zone
+            if (time_zone is not None) and (configured_timezone != time_zone):  # Need change de time zone
 
                 # If the user is working in only check mode we do not want to make any changes
                 IDGUtils.implement_check_mode(module)
@@ -201,7 +202,7 @@ def main():
                     tmp_result["msg"] = idg_mgmt.last_call()["data"]["LocalTimeZone"]
 
             if date or time:  # New Date/Time values
-                configured_datetime = datetime.strptime(idg_mgmt.call_by_id("get_time_settings")["data"]["TimeSettings"]["Time"], "%b %d, %Y %I:%M:%S %p")
+                configured_datetime = datetime.strptime(idg_mgmt.call_by_id("get_datetime_status")["data"]["DateTimeStatus"]["time"], "%a %b %d %H:%M:%S %Y")
 
                 datetime_msg = {"SetTimeAndDate":{}}
 
