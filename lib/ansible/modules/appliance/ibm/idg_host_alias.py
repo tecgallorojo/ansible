@@ -96,6 +96,13 @@ __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 
+def translate(d):
+    t = {"IPAddress": d["ip_address"], "mAdminState": d["admin_state"], "name": d["name"]}
+    if "user_summary" in d.keys() and d["user_summary"]:
+        t.update({"UserSummary": d["user_summary"]})
+    return t
+
+
 def main():
     # Validates the dependence of the utility module
     if HAS_IDG_DEPS:
@@ -120,7 +127,11 @@ def main():
         module.fail_json(msg="The IDG utils modules is required")
 
     # Parameters
-    entrys = module.params['entrys']
+    if module.params['entrys'] == []:
+        module.fail_json(msg='Need data in the "entrys" field')
+
+    entrys = [translate(e) for e in module.params['entrys']]
+
     domain_name = "default"  # System's level configurations are always do in default domain
 
     # Parse arguments to dict
@@ -154,25 +165,28 @@ def main():
         if idg_mgmt.is_ok(idg_mgmt.last_call()):  # If the answer is correct
 
             exist = []
-            for h in entrys:
-                for hc in idg_mgmt.call_by_id("get_hosts_alias")["data"]["HostAlias"]:
-                    exists.append([hc for hc in idg_mgmt.call_by_id("get_hosts_alias")["data"]["HostAlias"] if h["name"] == hc["name"] and h["IPAddress"] == hc["IPAddress"]])
+            for hc in idg_mgmt.call_by_id("get_hosts_alias")["data"]["HostAlias"]:
+                exist += [h for h in entrys if (h["name"] == hc["name"] and h["IPAddress"] == hc["IPAddress"]) and (h not in exist)]
 
-            if entrys != exist:
+            if exist == [] or (entrys.sort(key=lambda host: host["IPAddress"]) != exist.sort(key=lambda host: host["IPAddress"])):
 
-                for h in entrys:
+                # If the user is working in only check mode we do not want to make any changes
+                IDGUtils.implement_check_mode(module)
 
-                    if h not in exist:
-                        hosts_alias_msg = {"HostAlias": h}
-                        # Set host alias configuration
-                        idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/HostAlias", method='POST', data=json.dumps(hosts_alias_msg), id="set_hostsalias")
+                nh = [h for h in entrys if h not in exist]
 
-                        if idg_mgmt.is_ok(idg_mgmt.last_call()):  # If the answer is correct
-                            tmp_result['changed'] = True
-                            tmp_result['msg'] = idg_mgmt.last_call()["data"]["HostAlias"]
-                        else:
-                            module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name)
-                                             + str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
+                for h in nh:
+                    hosts_alias_msg = {"HostAlias": h}
+                    # Set host alias configuration
+                    idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/HostAlias", method='POST', data=json.dumps(hosts_alias_msg),
+                                      id="set_hostsalias")
+
+                    if idg_mgmt.is_created(idg_mgmt.last_call()):  # If the answer is correct
+                        tmp_result['changed'] = True
+                        tmp_result['msg'] = idg_mgmt.last_call()["data"][h["name"]]
+                    else:
+                        module.fail_json(msg=IDGApi.GENERAL_STATELESS_ERROR.format(__MODULE_FULLNAME, domain_name)
+                                         + str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
             else:
                 tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
