@@ -97,6 +97,13 @@ class AbstractListStr(object):
     def empty(self):
         return self.data == []
 
+    def optimal(self):
+        if self.data == []:
+            return None
+        elif len(self.data) == 1:
+            return self.data[0]
+        else:
+            return self.data
 
 class ErrorHandler(AbstractListStr):
     """
