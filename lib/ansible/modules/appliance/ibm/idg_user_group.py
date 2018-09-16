@@ -136,12 +136,12 @@ from ansible.module_utils._text import to_native
 HAS_IDG_DEPS = False
 try:
     from ansible.module_utils.appliance.ibm.idg_common import result, idg_endpoint_spec, IDGUtils
-    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, ErrorHandler, AbstractListStr, AbstractListDict
+    from ansible.module_utils.appliance.ibm.idg_rest_mgmt import IDGApi, ErrorHandler, AbstractListStr
     HAS_IDG_DEPS = True
 except ImportError:
     try:
         from library.module_utils.idg_common import result, idg_endpoint_spec, IDGUtils
-        from library.module_utils.idg_rest_mgmt import IDGApi, ErrorHandler, AbstractListStr, AbstractListDict
+        from library.module_utils.idg_rest_mgmt import IDGApi, ErrorHandler, AbstractListStr
         HAS_IDG_DEPS = True
     except ImportError:
         pass
