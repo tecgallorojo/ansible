@@ -261,7 +261,7 @@ def main():
                             tmp_result['msg'] = idg_mgmt.last_call()["data"]['result']
                             tmp_result['changed'] = True
                         else:
-                            module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                            module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(state, domain_name) +
                                              str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
                 else:
@@ -283,7 +283,7 @@ def main():
                 tmp_result['msg'] = idg_mgmt.last_call()["data"]['MoveFile']
                 tmp_result['changed'] = True
             else:
-                module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(state, domain_name) +
                                  str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
         elif state == 'show':  # Show details of file or content of directories
@@ -311,7 +311,7 @@ def main():
                         output = [{"name": i["name"], "size": i["size"], "modified": i["modified"]}
                                   for i in idg_mgmt.last_call()["data"]['filestore']['location']['file'] if i['name'] == path_as_list[-1]]
                     else:
-                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(state, domain_name) +
                                          str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
                 tmp_result['msg'] = IDGUtils.COMPLETED_MESSAGE
@@ -340,7 +340,7 @@ def main():
                 tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
             else:
-                module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(state, domain_name) +
                                  str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
         #

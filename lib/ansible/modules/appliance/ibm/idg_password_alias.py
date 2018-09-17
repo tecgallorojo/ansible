@@ -245,7 +245,7 @@ def main():
                         tmp_result['changed'] = True
 
                     else:
-                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(state, domain_name) +
                                          str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
                 else:  # Update
@@ -257,7 +257,7 @@ def main():
                         tmp_result['changed'] = True
 
                     else:
-                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(state, domain_name) +
                                          str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
             elif state == 'absent':
@@ -275,7 +275,7 @@ def main():
                         tmp_result['changed'] = True
 
                     else:
-                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                        module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(state, domain_name) +
                                          str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
                 else:

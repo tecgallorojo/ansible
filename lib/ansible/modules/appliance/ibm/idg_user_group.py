@@ -20,14 +20,9 @@ description:
 version_added: "2.8"
 options:
 
-  domain:
-    description:
-      - Domain identifier.
-    required: True
-
   state:
     description:
-      - Specifies the current state of the user group inside the domain.
+      - Specifies the current state of the user group.
       - C(present), C(absent). Create or remove.
     default: present
     required: False
@@ -46,7 +41,7 @@ options:
 
   admin_state:
     description:
-      - Define the administrative state of the domain.
+      - Define the administrative state of the user group.
       - C(enabled), To make active.
       - C(disabled), To make inactive.
     default: enabled
@@ -90,7 +85,6 @@ EXAMPLES = '''
         idg_user_group:
             idg_connection: "{{ remote_idg }}"
             name: validators
-            domain: bill.prod
             state: present
             user_summary: Responsible for the validation of quality and operation
             command_group:
@@ -99,15 +93,6 @@ EXAMPLES = '''
 '''
 
 RETURN = '''
-domain:
-  description:
-    - The name of the domain.
-  returned: always
-  type: string
-  sample:
-    - core-security-wrap
-    - DevWSOrchestration
-
 name:
   description:
     - The name of the user group that is being worked on.
@@ -157,7 +142,6 @@ def main():
     if HAS_IDG_DEPS:
         # Arguments/parameters that a user can pass to the module
         module_args = dict(
-            domain=dict(type='str', required=True),  # Domain
             name=dict(type='str', required=True),  # User group name
             user_summary=dict(type='str', required=False),  # Description
             state=dict(type='str', choices=['present', 'absent'], default='present'),
@@ -245,7 +229,7 @@ def main():
     idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
 
     # Domain to work
-    domain_name = module.params['domain']
+    domain_name = "default"
 
     # Status
     state = module.params['state']
@@ -265,7 +249,7 @@ def main():
                       force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
     # Intermediate values ​​for result
-    tmp_result = {"name": usergroup_name, "domain": domain_name, "msg": None, "changed": False, "failed": None}
+    tmp_result = {"name": usergroup_name, "msg": None, "changed": False, "failed": None}
 
     # Configuration template for the object
     usergroup_msg = {"UserGroup": {
@@ -299,13 +283,12 @@ def main():
 
         if idg_mgmt.is_ok(idg_mgmt.last_call()):  # If the answer is correct
 
-            exist_user_group = False
-            exist_user_group_name = False
+            exist_user_group, exist_user_group_name = False, False
             if "UserGroup" in idg_mgmt.last_call()["data"].keys():
                 for ug in idg_mgmt.last_call()["data"]["UserGroup"]:
                     del ug["_links"]  # Clean
                     if usergroup_msg["UserGroup"] == ug:
-                        exist_user_group = True
+                        exist_user_group, exist_user_group_name = True, True
                         break
                     elif usergroup_msg["UserGroup"]["name"] == ug["name"]:
                         exist_user_group_name = True
@@ -335,7 +318,7 @@ def main():
                     tmp_result['changed'] = True
 
                 else:
-                    module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) +
+                    module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(state, domain_name) +
                                      str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
 
         else:  # Can't read the settings

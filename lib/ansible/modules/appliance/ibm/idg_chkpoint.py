@@ -220,7 +220,7 @@ def main():
                 if idg_mgmt.is_ok(idg_mgmt.last_call()):
                     chkpoints = AbstractListDict(idg_mgmt.last_call()["data"][CHKPOINT_STATUS])
                 else:
-                    module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(__MODULE_FULLNAME, state, domain_name) + " Unable to get " + CHKPOINT_STATUS)
+                    module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(state, domain_name) + " Unable to get " + CHKPOINT_STATUS)
 
                 if state == 'present':
 
