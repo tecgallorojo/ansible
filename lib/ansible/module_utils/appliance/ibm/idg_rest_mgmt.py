@@ -55,7 +55,7 @@ class AbstractListDict(object):
         return self.data
 
     def filter(self, **kwargs):
-        f = [d for d in self.values(key=kwargs['key']) if re.match(kwargs['pattern'], d, kwargs['flags'])]
+        f = [d for d in self.values(key=kwargs['key']) if re.match(kwargs['pattern'], str(d), kwargs['flags'])]
         return f
 
     def empty(self):
@@ -223,7 +223,7 @@ class IDGApi(object):
 
         except HTTPError as e:
             # Get results with code different from 200
-            self.calls.append({"code": int(e.getcode()), "msg": e.msg, "data": json.loads(e.read()), "id": kwargs["id"]})
+            self.calls.append({"code": int(e.getcode()), "msg": e.msg, "data": json.loads(e.read()), "id": kwargs["id"], "url": url})
         except SSLValidationError as e:
             self.ansible_module.fail_json(msg=to_native("Error validating the server's certificate for ({0}). {1}".format(url, str(e))))
         except ConnectionError as e:
@@ -231,7 +231,7 @@ class IDGApi(object):
         except Exception as e:
             self.ansible_module.fail_json(msg=to_native("Unknown error for ({0}). {1}".format(url, str(e))))
         else:
-            self.calls.append({"code": int(resp.getcode()), "msg": resp.msg, "data": json.loads(resp.read()), "id": kwargs["id"]})
+            self.calls.append({"code": int(resp.getcode()), "msg": resp.msg, "data": json.loads(resp.read()), "id": kwargs["id"], "url": url})
 
     def last_call(self):
         # Direct access to the result of the last API call
