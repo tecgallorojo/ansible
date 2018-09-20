@@ -109,3 +109,29 @@ class IDGUtils(object):
             return [domain_resp['name']]
         else:
             return [d['name'] for d in domain_resp]
+
+    @staticmethod
+    def format_import_result(result, **kwargs):
+        tmp_result = result[kwargs["element"]]
+        try:
+            if isinstance(tmp_result[kwargs["detail"]], list):
+
+                return {kwargs["element"]: {"summary": {"total": len(tmp_result[kwargs["detail"]]),
+                                                        "status": IDGUtils.get_status_summary(tmp_result[kwargs["detail"]])},
+                                                        "detail": tmp_result[kwargs["detail"]]}}
+            else:
+                return {kwargs["element"]: tmp_result[kwargs["detail"]]}
+
+        except Exception as e:
+            return {kwargs["element"]: tmp_result}
+
+    @staticmethod
+    def get_status_summary(list_dict):
+        # Return dictionary with the inventory of states
+        s = {}
+        for i in list_dict:
+            if i['status'] not in s.keys():
+                s.update({i['status']: 1})
+            else:
+                s[i['status']] += 1
+        return s
