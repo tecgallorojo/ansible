@@ -118,7 +118,7 @@ EXAMPLES = '''
         idg_connection: "{{ remote_idg }}"
         state: imported
         overwrite_objects: True
-        input_file: "{{ export_out['file'] }}"
+        input_file: "{{ export_out['export_file'] }}"
 '''
 
 RETURN = '''
@@ -130,6 +130,12 @@ domain:
   sample:
     - core-security-wrap
     - DevWSOrchestration
+
+export_file:
+  description:
+    - Encode base64 export zip
+  returned: when successfull exported
+  type: string
 
 msg:
   description:
@@ -509,7 +515,8 @@ def main():
             argument_spec=module_args,
             supports_check_mode=True,
             # Interaction between parameters
-            required_if=[['state', 'imported', ['input_file']]]
+            required_if=[['state', 'imported', ['input_file']],
+                         ['state', 'exported', ['objects']]]
         )
     else:
         # Failure AnsibleModule instance
@@ -521,14 +528,6 @@ def main():
 
     # Parse arguments to dict
     idg_data_spec = IDGUtils.parse_to_dict(module, module.params['idg_connection'], 'IDGConnection', IDGUtils.ANSIBLE_VERSION)
-
-    # Status & domain
-    state = module.params['state']
-    domain_name = module.params['domain']
-    if isinstance(AbstractListStr(module.params["objects"]).optimal(),list):
-        objects = [translate(module, o) for o in AbstractListStr(module.params["objects"]).optimal()]
-    else:
-        objects = translate(module, AbstractListStr(module.params["objects"]).optimal())
 
     # Init IDG API connect
     idg_mgmt = IDGApi(ansible_module=module,
@@ -542,18 +541,28 @@ def main():
                       password=idg_data_spec['password'],
                       force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
-    # Configuration template for the domain
-    export_action_msg = {"Export": {
-        "Format": "ZIP",
-        "Persisted": IDGUtils.str_on_off(module.params['persisted']),
-        "IncludeInternalFiles": IDGUtils.str_on_off(module.params['internal_files']),
-        "Object": objects
-    }}
+    # Status & domain
+    state = module.params['state']
+    domain_name = module.params['domain']
 
-    # Optional parameters
-    # Comments
-    if module.params['user_summary'] is not None:
-        export_action_msg["Export"].update({"UserSummary": module.params['user_summary']})
+    if module.params["objects"] is not None:  # For export
+        if isinstance(AbstractListStr(module.params["objects"]).optimal(),list):
+            objects = [translate(module, o) for o in AbstractListStr(module.params["objects"]).optimal()]
+        else:
+            objects = translate(module, AbstractListStr(module.params["objects"]).optimal())
+
+        # Configuration template for the domain
+        export_action_msg = {"Export": {
+            "Format": "ZIP",
+            "Persisted": IDGUtils.str_on_off(module.params['persisted']),
+            "IncludeInternalFiles": IDGUtils.str_on_off(module.params['internal_files']),
+            "Object": objects
+        }}
+
+        # Optional parameters
+        # Comments
+        if module.params['user_summary'] is not None:
+            export_action_msg["Export"].update({"UserSummary": module.params['user_summary']})
 
     import_action_msg = {"Import": {
         "Format": "ZIP",
@@ -564,7 +573,7 @@ def main():
     }}
 
     # Intermediate values ​​for result
-    tmp_result = {"name": domain_name, "msg": None, "file": None, "changed": None, "failed": None}
+    tmp_result = {"domain": domain_name, "msg": None, "export_file": None, "changed": None, "failed": None}
 
     #
     # Here the action begins
@@ -572,39 +581,69 @@ def main():
     pdb.set_trace()
 
     try:
-        # Validate objects
-        if isinstance(objects,list):
-            for o in objects:
-                idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/{0}/{1}".format(o["class"], o["name"]), method='GET', id="get_object_status")
-                if not idg_mgmt.is_ok(idg_mgmt.last_call()):
-                    break
-        else:
-            idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/{0}/{1}".format(objects["class"], objects["name"]), method='GET', id="get_object_status")
+        if state == "exported" or state == "enabled" or state == "disabled":
 
-        if not idg_mgmt.is_ok(idg_mgmt.last_call()):
-            module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) +
-                             "URL: " + idg_mgmt.last_call()["url"] + str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
-
-        if state == "exported":
-            # export and finish
-            idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(export_action_msg), id="export_objects")
-
-            if idg_mgmt.is_accepted(idg_mgmt.last_call()):
-                # Asynchronous actions export accepted. Wait for complete
-                idg_mgmt.api_event_sink(IDGApi.URI_ACTION.format(domain_name), href=idg_mgmt.last_call()["data"]['_links']['location']['href'], state=state)
-
-                if idg_mgmt.is_ok(idg_mgmt.last_call()):
-                    # Export ok
-                    tmp_result['file'] = idg_mgmt.last_call()["data"]['result']['file']
-                    tmp_result['msg'] = idg_mgmt.last_call()["data"]["status"].capitalize()
-                    tmp_result['changed'] = True
-                else:
-                    # Can't retrieve the export
-                    module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
-
+            # Validate objects
+            if isinstance(objects,list):
+                for o in objects:
+                    idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/{0}/{1}".format(o["class"], o["name"]), method='GET', id="get_status_" + o["name"])
+                    if not idg_mgmt.is_ok(idg_mgmt.last_call()):
+                        break
             else:
-                # Export not accepted
-                module.fail_json(msg=IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name))
+                idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/{0}/{1}".format(objects["class"], objects["name"]), method='GET', id="get_status_" + objects["name"])
+
+            if not idg_mgmt.is_ok(idg_mgmt.last_call()):
+                module.fail_json(msg=IDGApi.GENERAL_ERROR.format(__MODULE_FULLNAME, state, domain_name) +
+                                 "URL: " + idg_mgmt.last_call()["url"] + str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
+
+            if state == "exported":
+                # export and finish
+                idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(export_action_msg), id="export_objects")
+
+                if idg_mgmt.is_accepted(idg_mgmt.last_call()):
+                    # Asynchronous actions export accepted. Wait for complete
+                    idg_mgmt.api_event_sink(IDGApi.URI_ACTION.format(domain_name), href=idg_mgmt.last_call()["data"]['_links']['location']['href'], state=state)
+
+                    if idg_mgmt.is_ok(idg_mgmt.last_call()):
+                        # Export ok
+                        tmp_result['export_file'] = idg_mgmt.last_call()["data"]['result']['file']
+                        tmp_result['msg'] = idg_mgmt.last_call()["data"]["status"].capitalize()
+                        tmp_result['changed'] = False
+                    else:
+                        # Can't retrieve the export
+                        module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
+
+                else:
+                    # Export not accepted
+                    module.fail_json(msg=IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name))
+
+            else:  # state == "enabled" or state == "disabled"
+                adminstate_msg = {"mAdminState": state}
+                need_change = False
+
+                if not isinstance(objects,list):
+                    objects = [objects]
+
+                for o in objects:
+                    if idg_mgmt.call_by_id("get_status_" + o["name"])["data"][o["class"]]["mAdminState"] != state:
+
+                        # If the user is working in only check mode we do not want to make any changes
+                        IDGUtils.implement_check_mode(module)
+
+                        # change de admin state
+                        idg_mgmt.api_call(IDGApi.URI_CONFIG.format(domain_name) + "/{0}/{1}/{2}".format(o["class"], o["name"], "mAdminState"), method='PUT',
+                                          data=json.dumps(adminstate_msg), id="set_status_" + o["name"])
+
+                        if idg_mgmt.is_ok(idg_mgmt.last_call()):
+                            tmp_result['changed'] = True
+                        else:
+                            module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(state, domain_name) +
+                                             str(ErrorHandler(idg_mgmt.last_call()["data"]['error'])))
+
+                if tmp_result['changed']:
+                    tmp_result['msg'] = idg_mgmt.last_call()["data"]["mAdminState"]
+                else:
+                    tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
 
         elif state == "imported":
 
@@ -626,14 +665,23 @@ def main():
                     if import_results['detected-errors'] != 'false':
                         # Import failed
                         tmp_result['msg'] = 'Import failed with error code: "' + import_results['detected-errors']['error'] + '"'
-                        tmp_result['changed'] = False
+                        tmp_result['changed'] = True
                         tmp_result['failed'] = True
                     else:
                         # Import success
-                        tmp_result.update({"results": []})  # Update to result
-                        tmp_result['results'].append({"export-details": import_results['export-details']})
                         tmp_result['msg'] = idg_mgmt.last_call()["data"]['status'].capitalize()
-                        tmp_result['changed'] = False
+                        tmp_result['changed'] = True
+
+                        tmp_result.update({"results": []})  # Add result details
+                        tmp_result['results'].append({"export-details": import_results['export-details']})  # Export action detail
+                        # Elements of the export to incorporate in the final result
+                        relevant_results = {"imported-objects": "object",
+                                            "imported-files": "file",
+                                            "imported-debug": "debug"}
+
+                        for k, v in relevant_results.items():  # Add all elements
+                            tmp_result['results'].append(IDGUtils.format_import_result(import_results,element=k,detail=v))
+
                 else:
                     # Can't retrieve the import result
                     module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
@@ -642,15 +690,11 @@ def main():
                 # Imported not accepted
                 module.fail_json(msg=IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name))
 
-        elif state == "enabled":
-            pass
-
-        else:  # state == "disabled"
-            pass
-
         #
         # Finish
         #
+        # Customize
+        del result['name']
         # Update
         for k, v in tmp_result.items():
             if v is not None:

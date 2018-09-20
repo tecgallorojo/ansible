@@ -223,17 +223,6 @@ __MODULE_VERSION = "1.0"
 __MODULE_FULLNAME = __MODULE_NAME + '-' + __MODULE_VERSION
 
 
-# Return dictionary with the inventory of states
-def get_status_summary(list_dict):
-    s = {}
-    for i in list_dict:
-        if i['status'] not in s.keys():
-            s.update({i['status']: 1})
-        else:
-            s[i['status']] += 1
-    return s
-
-
 def main():
     # Validates the dependence of the utility module
     if HAS_IDG_DEPS:
@@ -357,7 +346,7 @@ def main():
                             # Export ok
                             tmp_result['file'] = idg_mgmt.last_call()["data"]['result']['file']
                             tmp_result['msg'] = idg_mgmt.last_call()["data"]["status"].capitalize()
-                            tmp_result['changed'] = True
+                            tmp_result['changed'] = False
                         else:
                             # Can't retrieve the export
                             module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
@@ -444,74 +433,17 @@ def main():
                                 tmp_result['failed'] = True
                             else:
                                 # Import success
-                                tmp_result.update({"results": []})  # Update to result
-                                tmp_result['results'].append({"export-details": import_results['export-details']})
+                                tmp_result.update({"results": []})  # Add result details
+                                tmp_result['results'].append({"export-details": import_results['export-details']})  # Export action detail
+                                # Elements of the export to incorporate in the final result
+                                relevant_results = {"exec-script-results": "cfg-result",
+                                                    "file-copy-log": "file-result",
+                                                    "imported-objects": "object",
+                                                    "imported-files": "file",
+                                                    "imported-debug": "debug"}
 
-                                # EXEC-SCRIPT-RESULTS
-                                try:
-                                    exec_script_results = import_results['exec-script-results']
-                                    try:
-                                        if isinstance(exec_script_results['cfg-result'], list):
-
-                                            tmp_result['results'].append({"exec-script-results":
-                                                                         {"summary": {"total": len(exec_script_results['cfg-result']),
-                                                                                      "status": get_status_summary(exec_script_results['cfg-result'])},
-                                                                          "detail": exec_script_results['cfg-result']}})
-                                        else:
-                                            tmp_result['results'].append({"exec-script-results": exec_script_results['cfg-result']})
-
-                                    except Exception as e:
-                                        tmp_result['results'].append({"exec-script-results": exec_script_results})
-
-                                except Exception as e:
-                                    pass
-
-                                try:
-                                    tmp_result['results'].append({"file-copy-log": import_results['file-copy-log']['file-result']})
-                                except Exception as e:
-                                    pass
-
-                                try:
-                                    tmp_result['results'].append({"imported-debug": import_results['imported-debug']})
-                                except Exception as e:
-                                    pass
-
-                                # IMPORTED-FILES
-                                try:
-                                    imported_files = import_results['imported-files']
-                                    try:
-                                        if isinstance(imported_files['file'], list):
-
-                                            tmp_result['results'].append({"imported-files": {"summary": {"total": len(imported_files['file']),
-                                                                                                         "status": get_status_summary(imported_files['file'])},
-                                                                                             "detail": imported_files['file']}})
-                                        else:
-                                            tmp_result['results'].append({"imported-files": imported_files['file']})
-
-                                    except Exception as e:
-                                        tmp_result['results'].append({"imported-files": imported_files})
-
-                                except Exception as e:
-                                    pass
-
-                                # IMPORTED-OBJECTS
-                                try:
-                                    imported_objects = import_results['imported-objects']
-                                    try:
-                                        if isinstance(imported_objects['object'], list):
-
-                                            tmp_result['results'].append({"imported-objects":
-                                                                         {"summary": {"total": len(imported_objects['object']),
-                                                                                      "status": get_status_summary(imported_objects['object'])},
-                                                                          "detail": imported_objects['object']}})
-                                        else:
-                                            tmp_result['results'].append({"imported-objects": imported_objects['object']})
-
-                                    except Exception as e:
-                                        tmp_result['results'].append({"imported-objects": imported_objects})
-
-                                except Exception as e:
-                                    pass
+                                for k, v in relevant_results.items():  # Add all elements
+                                    tmp_result['results'].append(IDGUtils.format_import_result(import_results,element=k,detail=v))
 
                                 tmp_result['msg'] = idg_mgmt.last_call()["data"]['status'].capitalize()
                                 tmp_result['changed'] = True
