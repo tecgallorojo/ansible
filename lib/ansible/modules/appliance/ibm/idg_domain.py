@@ -82,20 +82,15 @@ options:
       - Specifies the current state of the domain.
       - C(present), C(absent). Create or remove a domain.
       - To make active set to C(enabled), inactive, set to C(disabled).
-        C(restarted) all services will be stoped and started.
         C(quiesced) Transitions the operational state of a domain,
         and the services and handlers associated with the domain,
         to down in a controlled manner.
         C(unquiesced) Bring the operational state of the domain to up
-      - Be particularly careful about changing the status to C(restarted).
-        These will affect all configured services within the domain.
-        C(restarted) all the configuration that has not been saved will be lost.
     default: present
     required: True
     choices:
       - present
       - absent
-      - restarted
       - quiesced
       - unquiesced
 
@@ -213,11 +208,6 @@ EXAMPLES = '''
             delete: false
             subdir: true
 
-  - name: Restart domain
-    idg_domain:
-        name: "{{ domain_name }}"
-        idg_connection: "{{ remote_idg }}"
-        state: restarted
 '''
 
 RETURN = '''
@@ -270,18 +260,18 @@ def main():
     # Define the available arguments/parameters that a user can pass to the module
     # File permission to the local: directory
     filemap_spec = {
-        'display': dict(type='bool'),  # File content can be displayed for the local: directory.
-        'exec': dict(type='bool'),  # Files in the local: directory can be run as scripts.
-        'copyfrom': dict(type='bool'),  # Files can be copied FROM the local: directory.
-        'copyto': dict(type='bool'),  # Files can be copied TO the local: directory.
-        'delete': dict(type='bool'),  # Files can be DELETED from the local: directory.
-        'subdir': dict(type='bool')  # Subdirectories can be created in the local: directory.
+        'display': dict(type='bool', default=True),  # File content can be displayed for the local: directory.
+        'exec': dict(type='bool', default=True),  # Files in the local: directory can be run as scripts.
+        'copyfrom': dict(type='bool', default=True),  # Files can be copied FROM the local: directory.
+        'copyto': dict(type='bool', default=True),  # Files can be copied TO the local: directory.
+        'delete': dict(type='bool', default=True),  # Files can be DELETED from the local: directory.
+        'subdir': dict(type='bool', default=True)  # Subdirectories can be created in the local: directory.
     }
 
     # Which types of events to generate when files are added to or deleted from the local: directory.
     monitoringmap_spec = {
-        'audit': dict(type='bool'),  # Generate audit events.
-        'log': dict(type='bool')  # Generate log events.
+        'audit': dict(type='bool', default=False),  # Generate audit events.
+        'log': dict(type='bool', default=False)  # Generate log events.
     }
 
     # Quiesce configuration
@@ -296,7 +286,7 @@ def main():
             name=dict(type='str', required=True),  # Domain name
             user_summary=dict(type='str', required=False),  # Domain description
             admin_state=dict(type='str', choices=['enabled', 'disabled'], default='enabled'),  # Domain's administrative state
-            state=dict(type='str', choices=['present', 'absent', 'restarted', 'quiesced', 'unquiesced'], default='present'),  # Domain's operational state
+            state=dict(type='str', choices=['present', 'absent', 'quiesced', 'unquiesced'], default='present'),  # Domain's operational state
             quiesce_conf=dict(type='dict', options=quiescemap_spec, default=dict({'delay': 0, 'timeout': 60})),  # Transitions the operational state to down
             idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True),  # IDG connection
             file_map=dict(type='dict', options=filemap_spec, default=dict({'display': True, 'exec': True, 'copyfrom': True,
@@ -395,8 +385,6 @@ def main():
     domain_obj_items = [k for k, v in domain_obj_msg['Domain'].items()]
 
     # Action messages
-    # Restart
-    restart_act_msg = {"RestartThisDomain": {}}
 
     # Quiesce
     quiesce_act_msg = {"DomainQuiesce": {
@@ -424,7 +412,7 @@ def main():
             # List of existing domains
             configured_domains = IDGUtils.domains_list(idg_mgmt.last_call()["data"]['domain'])
 
-            if state in ('present', 'restarted', 'quiesced', 'unquiesced'):  # They need for or do a domain
+            if state in ('present', 'quiesced', 'unquiesced'):  # They need for or do a domain
 
                 if domain_name not in configured_domains:  # Domain NOT EXIST.
 
@@ -442,11 +430,10 @@ def main():
                             # Opps can't create
                             module.fail_json(msg=IDGApi.ERROR_REACH_STATE.format(state, domain_name))
 
-                    elif state in ('restarted', 'quiesced', 'unquiesced'):  # Can't do this actions
+                    elif state in ('quiesced', 'unquiesced'):  # Can't do this actions
                         module.fail_json(msg=(IDGApi.ERROR_REACH_STATE + " " + IDGApi.ERROR_NOT_DOMAIN).format(state, domain_name))
 
                 else:  # Domain EXIST
-                    # Update, save or restart
                     # Get current domain configuration
                     idg_mgmt.api_call(IDGApi.URI_DOMAIN_CONFIG.format(domain_name), method='GET', id="exist_domain_config")
 
@@ -483,29 +470,6 @@ def main():
                             else:  # Identicals configurations
                                 # The current configuration is identical to the new configuration, there is nothing to do
                                 tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
-
-                        elif state == 'restarted':  # Restart domain
-                            # If the user is working in only check mode we do not want to make any changes
-                            IDGUtils.implement_check_mode(module)
-
-                            idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(restart_act_msg), id="restart_domain")
-
-                            if idg_mgmt.is_accepted(idg_mgmt.last_call()):
-                                # Asynchronous actions restart accepted. Wait for complete
-                                idg_mgmt.api_event_sink(IDGApi.URI_ACTION.format(domain_name),
-                                                        href=idg_mgmt.call_by_id("restart_domain")["data"]['_links']['location']['href'], state=state)
-
-                                if idg_mgmt.is_ok(idg_mgmt.last_call()):
-                                    # Restarted successfully
-                                    tmp_result['msg'] = idg_mgmt.last_call()["data"]["status"].capitalize()
-                                    tmp_result['changed'] = True
-                                else:
-                                    # Can't retrieve the restart result
-                                    module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
-
-                            else:
-                                # Can't restarted
-                                module.fail_json(msg=IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name))
 
                         elif state in ('quiesced', 'unquiesced'):
 

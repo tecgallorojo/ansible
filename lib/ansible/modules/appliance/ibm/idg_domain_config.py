@@ -29,11 +29,16 @@ options:
       - Specifies the current state of the domain.
         C(reseted) will delete all configured services within the domain.
         C(exported), C(imported), C(saved) domain settings
+        C(restarted) all services will be stoped and started.
       - Be particularly careful about changing the status C(reseted).
         These will B(deletes all configuration) data in the domain.
+      - The status to C(restarted) will affect all configured services within the domain.
+        C(restarted) all the configuration that has not been saved will be lost.
+
     default: saved
     required: True
     choices:
+      - restarted
       - reseted
       - imported
       - exported
@@ -143,7 +148,13 @@ EXAMPLES = '''
         name: "{{ target_domain }}"
         idg_connection: "{{ remote_idg }}"
         state: saved
-      register: save_out
+
+    - name: Restart domain
+      idg_domain:
+        name: "{{ domain_name }}"
+        idg_connection: "{{ remote_idg }}"
+        state: restarted
+
 '''
 
 RETURN = '''
@@ -228,7 +239,7 @@ def main():
     if HAS_IDG_DEPS:
         # Arguments/parameters that a user can pass to the module
         module_args = dict(
-            state=dict(type='str', choices=['exported', 'imported', 'reseted', 'saved'], default='saved'),  # Domain's operational state
+            state=dict(type='str', choices=['restarted', 'exported', 'imported', 'reseted', 'saved'], default='saved'),  # Domain's operational state
             idg_connection=dict(type='dict', options=idg_endpoint_spec, required=True),  # IDG connection
             name=dict(type='str', required=True),  # Domain to work
             # for Export
@@ -307,6 +318,8 @@ def main():
     }}
 
     # Action messages
+    # Restart
+    restart_act_msg = {"RestartThisDomain": {}}
     # Reset
     reset_act_msg = {"ResetThisDomain": {}}
     # Save
@@ -408,6 +421,29 @@ def main():
                         else:
                             # Domain is save
                             tmp_result['msg'] = IDGUtils.IMMUTABLE_MESSAGE
+
+                elif state == 'restarted':  # Restart domain
+                    # If the user is working in only check mode we do not want to make any changes
+                    IDGUtils.implement_check_mode(module)
+
+                    idg_mgmt.api_call(IDGApi.URI_ACTION.format(domain_name), method='POST', data=json.dumps(restart_act_msg), id="restart_domain")
+
+                    if idg_mgmt.is_accepted(idg_mgmt.last_call()):
+                        # Asynchronous actions restart accepted. Wait for complete
+                        idg_mgmt.api_event_sink(IDGApi.URI_ACTION.format(domain_name),
+                                                href=idg_mgmt.call_by_id("restart_domain")["data"]['_links']['location']['href'], state=state)
+
+                        if idg_mgmt.is_ok(idg_mgmt.last_call()):
+                            # Restarted successfully
+                            tmp_result['msg'] = idg_mgmt.last_call()["data"]["status"].capitalize()
+                            tmp_result['changed'] = True
+                        else:
+                            # Can't retrieve the restart result
+                            module.fail_json(msg=IDGApi.ERROR_RETRIEVING_RESULT.format(state, domain_name))
+
+                    else:
+                        # Can't restarted
+                        module.fail_json(msg=IDGApi.ERROR_ACCEPTING_ACTION.format(state, domain_name))
 
                 elif state == 'imported':
 
