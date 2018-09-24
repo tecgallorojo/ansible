@@ -209,7 +209,7 @@ results:
 '''
 
 import json
-#import pdb
+import pdb
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils._text import to_native
@@ -291,19 +291,18 @@ def main():
                       password=idg_data_spec['password'],
                       force_basic_auth=IDGUtils.BASIC_AUTH_SPEC)
 
-    # Variable to store the status of the action
-    action_result = ''
-
     # Configuration template for the domain
     export_action_msg = {"Export": {
         "Format": "ZIP",
-        "UserComment": module.params['user_summary'],
         "AllFiles": IDGUtils.str_on_off(module.params['all_files']),
         "Persisted": IDGUtils.str_on_off(module.params['persisted']),
         "IncludeInternalFiles": IDGUtils.str_on_off(module.params['internal_files'])
         # TODO
         # "DeploymentPolicy":""
     }}
+    # Add description
+    if module.params['user_summary'] is not None:
+        export_action_msg["Export"].update({"UserComment": module.params['user_summary']})
 
     import_action_msg = {"Import": {
         "Format": "ZIP",
@@ -331,7 +330,7 @@ def main():
     #
     # Here the action begins
     #
-    # pdb.set_trace()
+    pdb.set_trace()
 
     try:
         # List of configured domains
