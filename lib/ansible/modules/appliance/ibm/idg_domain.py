@@ -87,7 +87,6 @@ options:
         to down in a controlled manner.
         C(unquiesced) Bring the operational state of the domain to up
     default: present
-    required: True
     choices:
       - present
       - absent
